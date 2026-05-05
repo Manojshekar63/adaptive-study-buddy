@@ -1,13 +1,23 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLearner } from "@/store/learner";
 import { Button } from "@/components/ui/button";
 import { Flame, CheckCircle2, Clock, Sparkles, Activity, Brain } from "lucide-react";
 import { motion } from "framer-motion";
-import { setWordMasteredApi } from "@/lib/api/learner";
+import { setWordMasteredApi, loadModelInfo, resetWordModel } from "@/lib/api/learner";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export default function Dashboard() {
   const nav = useNavigate();
   const { name, schedule, history, readingSpeed, decoding, fatigue, difficultWords, setWordMastered } = useLearner();
+  const [trainedN, setTrainedN] = useState<number>(0);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) loadModelInfo(data.user.id).then((m) => m && setTrainedN(m.trainedN));
+    });
+  }, [difficultWords]);
 
   const tricky = Object.entries(difficultWords)
     .filter(([, v]) => !v.mastered && v.tapCount > 0)
@@ -91,10 +101,28 @@ export default function Dashboard() {
       </motion.div>
 
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="rounded-3xl bg-card border border-border shadow-card p-6 mt-6">
-        <h3 className="font-display font-semibold flex items-center gap-2 mb-4">
-          <Brain className="w-4 h-4 text-accent" /> Your tricky words
-          <span className="text-xs font-normal text-muted-foreground ml-2">— learned from how you read</span>
-        </h3>
+        <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
+          <h3 className="font-display font-semibold flex items-center gap-2">
+            <Brain className="w-4 h-4 text-accent" /> Your tricky words
+          </h3>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-muted-foreground">
+              {trainedN > 0
+                ? `ML model trained on ${trainedN} interaction${trainedN === 1 ? "" : "s"}${trainedN < 10 ? " · using baseline" : " · live"}`
+                : "ML model warming up"}
+            </span>
+            {trainedN > 0 && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-xs"
+                onClick={async () => { await resetWordModel(); setTrainedN(0); toast.success("Model reset"); }}
+              >
+                Reset model
+              </Button>
+            )}
+          </div>
+        </div>
         {tricky.length === 0 ? (
           <p className="text-sm text-muted-foreground">Tap any word that feels tricky while reading — your reader will remember and break it down for you next time.</p>
         ) : (
