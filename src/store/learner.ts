@@ -45,6 +45,7 @@ interface LearnerState {
   uploadedName?: string;
   scheduleId?: string;
   topicContent?: { title: string; paragraphs: string[] };
+  difficultWords: Record<string, { difficulty: number; tapCount: number; mastered: boolean }>;
   schedule: ScheduleBlock[];
   currentBlockId?: string;
   history: SessionRecord[];
@@ -64,6 +65,9 @@ interface LearnerState {
   setCurrentBlock: (id?: string) => void;
   recordSession: (rec: SessionRecord) => void;
   applyAdaptation: (next: ScheduleBlock[]) => void;
+  setDifficultWords: (m: LearnerState["difficultWords"]) => void;
+  bumpWordTap: (word: string) => void;
+  setWordMastered: (word: string, mastered: boolean) => void;
   log: (message: string, tag?: string) => void;
   toggleReasoning: (v?: boolean) => void;
   setTour: (v: boolean) => void;
