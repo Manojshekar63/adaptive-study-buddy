@@ -236,6 +236,7 @@ export type Database = {
       word_difficulty: {
         Row: {
           created_at: string
+          exposures: number
           id: string
           last_tapped: string
           mastered: boolean
@@ -245,6 +246,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          exposures?: number
           id?: string
           last_tapped?: string
           mastered?: boolean
@@ -254,6 +256,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          exposures?: number
           id?: string
           last_tapped?: string
           mastered?: boolean
@@ -265,13 +268,43 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      v_word_difficulty: {
+        Row: {
+          difficulty: number | null
+          exposures: number | null
+          last_tapped: string | null
+          mastered: boolean | null
+          tap_count: number | null
+          user_id: string | null
+          word: string | null
+        }
+        Insert: {
+          difficulty?: never
+          exposures?: number | null
+          last_tapped?: string | null
+          mastered?: boolean | null
+          tap_count?: number | null
+          user_id?: string | null
+          word?: string | null
+        }
+        Update: {
+          difficulty?: never
+          exposures?: number | null
+          last_tapped?: string | null
+          mastered?: boolean | null
+          tap_count?: number | null
+          user_id?: string | null
+          word?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       increment_word_tap: {
         Args: { p_word: string }
         Returns: {
           created_at: string
+          exposures: number
           id: string
           last_tapped: string
           mastered: boolean
@@ -285,6 +318,11 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      record_word_exposure: { Args: { p_words: string[] }; Returns: undefined }
+      set_word_mastered: {
+        Args: { p_mastered: boolean; p_word: string }
+        Returns: undefined
       }
     }
     Enums: {
