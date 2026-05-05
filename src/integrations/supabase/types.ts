@@ -233,12 +233,59 @@ export type Database = {
           },
         ]
       }
+      word_difficulty: {
+        Row: {
+          created_at: string
+          id: string
+          last_tapped: string
+          mastered: boolean
+          tap_count: number
+          user_id: string
+          word: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_tapped?: string
+          mastered?: boolean
+          tap_count?: number
+          user_id: string
+          word: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_tapped?: string
+          mastered?: boolean
+          tap_count?: number
+          user_id?: string
+          word?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      increment_word_tap: {
+        Args: { p_word: string }
+        Returns: {
+          created_at: string
+          id: string
+          last_tapped: string
+          mastered: boolean
+          tap_count: number
+          user_id: string
+          word: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "word_difficulty"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
     }
     Enums: {
       [_ in never]: never
