@@ -28,15 +28,17 @@ function syllabify(word: string): string[] {
 
 export default function StudySession() {
   const nav = useNavigate();
-  const { schedule, currentBlockId, topic, uploadedName, decoding, log } = useLearner();
+  const { schedule, currentBlockId, topic, uploadedName, topicContent, decoding, log } = useLearner();
   const block = schedule.find((b) => b.id === currentBlockId) ?? schedule.find((b) => b.kind === "study" && !b.done);
 
   const supports = block?.supports ?? { audio: decoding.phonological >= 2, chunking: decoding.phonological >= 1 };
 
   const content = useMemo(() => {
-    const key = topic && PRESET_TOPICS[topic] ? topic : Object.keys(PRESET_TOPICS)[0];
-    return PRESET_TOPICS[key];
-  }, [topic, uploadedName]);
+    if (topicContent?.paragraphs?.length) return topicContent;
+    if (topic && PRESET_TOPICS[topic]) return PRESET_TOPICS[topic];
+    if (topic) return { title: topic, paragraphs: ["Your reading is being prepared. Please head back to the schedule in a moment."] };
+    return PRESET_TOPICS[Object.keys(PRESET_TOPICS)[0]];
+  }, [topic, uploadedName, topicContent]);
 
   const [pIdx, setPIdx] = useState(0);
   const [activeWord, setActiveWord] = useState<number | null>(null);
