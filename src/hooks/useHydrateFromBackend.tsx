@@ -11,6 +11,7 @@ export function useHydrateFromBackend() {
   const setSchedule = useLearner((s) => s.setSchedule);
   const setScheduleId = useLearner((s) => s.setScheduleId);
   const setTopicContent = useLearner((s) => s.setTopicContent);
+  const setDifficultWords = useLearner((s) => s.setDifficultWords);
 
   useEffect(() => {
     if (!user) return;
