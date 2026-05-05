@@ -32,10 +32,12 @@ function syllabify(word: string): string[] {
 
 export default function StudySession() {
   const nav = useNavigate();
-  const { schedule, currentBlockId, topic, uploadedName, topicContent, decoding, log } = useLearner();
+  const { schedule, currentBlockId, topic, uploadedName, topicContent, decoding, log, difficultWords, bumpWordTap } = useLearner();
   const block = schedule.find((b) => b.id === currentBlockId) ?? schedule.find((b) => b.kind === "study" && !b.done);
 
   const supports = block?.supports ?? { audio: decoding.phonological >= 2, chunking: decoding.phonological >= 1 };
+  // Personalize threshold: weaker decoders get help sooner
+  const threshold = Math.max(0.25, AUTO_HELP_THRESHOLD - decoding.phonological * 0.05);
 
   const content = useMemo(() => {
     if (topicContent?.paragraphs?.length) return topicContent;
@@ -55,14 +57,35 @@ export default function StudySession() {
   const para = paragraphs[pIdx];
   const words = para.split(/\s+/);
 
+  // Record exposures for unique long words in this paragraph (fire-and-forget)
+  useEffect(() => {
+    const unique = Array.from(new Set(words.map(norm).filter((w) => w.length >= 4)));
+    if (unique.length) recordWordExposures(unique);
+  }, [pIdx]);
+
+  const isAutoHelp = (w: string) => {
+    const entry = difficultWords[norm(w)];
+    return !!entry && !entry.mastered && entry.difficulty >= threshold;
+  };
+
   const next = () => {
     if (pIdx + 1 >= paragraphs.length) { nav("/study/feedback"); return; }
     setPIdx(pIdx + 1); setActiveWord(null); setBreakdown(null);
   };
 
   const onWordClick = (w: string) => {
-    if (!supports.chunking) return;
-    setBreakdown({ word: w.replace(/[.,!?;:]$/, ""), pieces: syllabify(w.replace(/[.,!?;:]$/, "")) });
+    const clean = w.replace(/[.,!?;:]$/, "");
+    setBreakdown({ word: clean, pieces: syllabify(clean) });
+    const n = norm(clean);
+    if (n.length >= 2) {
+      const before = difficultWords[n];
+      bumpWordTap(clean);
+      recordWordTap(clean);
+      const newCount = (before?.tapCount ?? 0) + 1;
+      if (newCount === 2) {
+        log(`Auto-chunking enabled for "${n}" — model marked it as a tricky word.`, "personalize");
+      }
+    }
   };
 
   return (
