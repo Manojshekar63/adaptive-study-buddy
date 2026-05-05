@@ -4,8 +4,12 @@ import { useLearner } from "@/store/learner";
 import { PRESET_TOPICS } from "@/lib/content";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
-import { Volume2, ArrowRight, Eye, Focus } from "lucide-react";
+import { Volume2, ArrowRight, Eye, Focus, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { recordWordTap, recordWordExposures } from "@/lib/api/learner";
+
+const AUTO_HELP_THRESHOLD = 0.4;
+const norm = (w: string) => w.toLowerCase().replace(/[^a-z']/g, "");
 
 function syllabify(word: string): string[] {
   // naive friendly chunker for demo
