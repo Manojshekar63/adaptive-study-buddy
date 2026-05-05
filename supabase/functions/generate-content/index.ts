@@ -1,4 +1,4 @@
-// Generate dyslexia-friendly study content for an arbitrary topic
+// Generate dyslexia-friendly study content for an arbitrary topic or uploaded notes
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -10,9 +10,10 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { topic, scheduleId } = await req.json();
-    if (!topic || typeof topic !== "string") {
-      return new Response(JSON.stringify({ error: "topic required" }), {
+    const { topic, scheduleId, sourceText } = await req.json();
+    const hasSource = typeof sourceText === "string" && sourceText.trim().length > 40;
+    if (!hasSource && (!topic || typeof topic !== "string")) {
+      return new Response(JSON.stringify({ error: "topic or sourceText required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -25,9 +26,12 @@ Deno.serve(async (req) => {
       "You write short reading passages for dyslexic learners. " +
       "Use plain everyday words. Short sentences (max 15 words). " +
       "Warm, clear, concrete. No jargon, no lists, no markdown.";
-    const user =
-      `Write 4 short paragraphs (about 50-65 words each) explaining "${topic}" to a curious learner. ` +
-      `Return via the write_passage tool.`;
+
+    const userMsg = hasSource
+      ? `Rewrite the following study notes as 4 short paragraphs (50-65 words each), faithful to the source content. ` +
+        `Pick a clear short title from the notes. Notes:\n\n"""${String(sourceText).slice(0, 12000)}"""`
+      : `Write 4 short paragraphs (about 50-65 words each) explaining "${topic}" to a curious learner. ` +
+        `Return via the write_passage tool.`;
 
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -36,7 +40,7 @@ Deno.serve(async (req) => {
         model: "google/gemini-3-flash-preview",
         messages: [
           { role: "system", content: sys },
-          { role: "user", content: user },
+          { role: "user", content: userMsg },
         ],
         tools: [{
           type: "function",
@@ -88,7 +92,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Persist to schedules.content if scheduleId + auth provided
     if (scheduleId) {
       const authHeader = req.headers.get("Authorization");
       if (authHeader) {
