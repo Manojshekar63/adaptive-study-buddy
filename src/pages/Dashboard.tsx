@@ -1,12 +1,18 @@
 import { useNavigate } from "react-router-dom";
 import { useLearner } from "@/store/learner";
 import { Button } from "@/components/ui/button";
-import { Flame, CheckCircle2, Clock, Sparkles, Activity } from "lucide-react";
+import { Flame, CheckCircle2, Clock, Sparkles, Activity, Brain } from "lucide-react";
 import { motion } from "framer-motion";
+import { setWordMasteredApi } from "@/lib/api/learner";
 
 export default function Dashboard() {
   const nav = useNavigate();
-  const { name, schedule, history, readingSpeed, decoding, fatigue } = useLearner();
+  const { name, schedule, history, readingSpeed, decoding, fatigue, difficultWords, setWordMastered } = useLearner();
+
+  const tricky = Object.entries(difficultWords)
+    .filter(([, v]) => !v.mastered && v.tapCount > 0)
+    .sort((a, b) => b[1].difficulty - a[1].difficulty)
+    .slice(0, 8);
 
   const total = schedule.length || 1;
   const done = schedule.filter((b) => b.done).length;
