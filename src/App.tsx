@@ -4,7 +4,10 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppShell } from "@/components/layout/AppShell";
+import { AuthProvider } from "@/hooks/useAuth";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import Landing from "./pages/Landing";
+import AuthPage from "./pages/Auth";
 import Onboarding from "./pages/Onboarding";
 import ReadingAssessment from "./pages/ReadingAssessment";
 import DecodingAssessment from "./pages/DecodingAssessment";
@@ -17,26 +20,31 @@ import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
 
+const protect = (el: JSX.Element) => <ProtectedRoute>{el}</ProtectedRoute>;
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <AppShell>
-          <Routes>
-            <Route path="/" element={<Landing />} />
-            <Route path="/onboarding" element={<Onboarding />} />
-            <Route path="/assess/reading" element={<ReadingAssessment />} />
-            <Route path="/assess/decoding" element={<DecodingAssessment />} />
-            <Route path="/study/new" element={<StudyInput />} />
-            <Route path="/schedule" element={<Schedule />} />
-            <Route path="/study/session" element={<StudySession />} />
-            <Route path="/study/feedback" element={<Feedback />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </AppShell>
+        <AuthProvider>
+          <AppShell>
+            <Routes>
+              <Route path="/" element={<Landing />} />
+              <Route path="/auth" element={<AuthPage />} />
+              <Route path="/onboarding" element={protect(<Onboarding />)} />
+              <Route path="/assess/reading" element={protect(<ReadingAssessment />)} />
+              <Route path="/assess/decoding" element={protect(<DecodingAssessment />)} />
+              <Route path="/study/new" element={protect(<StudyInput />)} />
+              <Route path="/schedule" element={protect(<Schedule />)} />
+              <Route path="/study/session" element={protect(<StudySession />)} />
+              <Route path="/study/feedback" element={protect(<Feedback />)} />
+              <Route path="/dashboard" element={protect(<Dashboard />)} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </AppShell>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
