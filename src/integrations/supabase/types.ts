@@ -171,6 +171,7 @@ export type Database = {
       schedules: {
         Row: {
           active: boolean
+          content: Json | null
           created_at: string
           id: string
           source: string
@@ -179,6 +180,7 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          content?: Json | null
           created_at?: string
           id?: string
           source?: string
@@ -187,6 +189,7 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          content?: Json | null
           created_at?: string
           id?: string
           source?: string

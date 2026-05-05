@@ -11,10 +11,11 @@ import { PRESET_TOPICS } from "@/lib/content";
 import { Upload, FileText, Sparkles, ArrowRight, X } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function StudyInput() {
   const nav = useNavigate();
-  const { setTopic, setUploaded, setSchedule, setScheduleId, log, availableMin, readingSpeed, fatigue, decoding } = useLearner();
+  const { setTopic, setUploaded, setSchedule, setScheduleId, setTopicContent, log, availableMin, readingSpeed, fatigue, decoding } = useLearner();
   const { user } = useAuth();
   const [topic, setTopicLocal] = useState("");
   const [uploaded, setUploadedLocal] = useState<string | null>(null);
@@ -34,14 +35,45 @@ export default function StudyInput() {
     setSchedule(blocks);
     reasons.forEach((r) => log(r, "schedule"));
     log(`Built ${blocks.length}-block plan for "${chosenTopic}"`, "schedule");
+
+    // Use preset content instantly when available, otherwise generate via AI
+    const preset = PRESET_TOPICS[chosenTopic];
+    if (preset) {
+      setTopicContent(preset);
+    } else {
+      setTopicContent(undefined);
+    }
+
+    let scheduleId: string | undefined;
     if (user) {
       const result = await saveSchedule(user.id, chosenTopic, source, blocks);
       if (result) {
+        scheduleId = result.scheduleId;
         setScheduleId(result.scheduleId);
         setSchedule(result.blocks);
         for (const r of reasons) await logReasoning(user.id, r, "schedule", result.scheduleId);
       }
     }
+
+    if (!preset) {
+      toast.message("Preparing your reading…");
+      supabase.functions
+        .invoke("generate-content", { body: { topic: chosenTopic, scheduleId } })
+        .then(({ data, error }) => {
+          if (error) {
+            const status = (error as any).context?.status;
+            if (status === 429) toast.error("Lots of requests right now — try again in a moment.");
+            else if (status === 402) toast.error("Out of AI credits — add some in Settings → Workspace → Usage.");
+            else toast.error("Couldn't write your passage — using a fallback.");
+            return;
+          }
+          if (data?.content) {
+            setTopicContent(data.content);
+            toast.success("Your reading is ready");
+          }
+        });
+    }
+
     nav("/schedule");
   };
 

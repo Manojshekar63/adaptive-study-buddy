@@ -10,6 +10,7 @@ export function useHydrateFromBackend() {
   const setReading = useLearner((s) => s.setReading);
   const setSchedule = useLearner((s) => s.setSchedule);
   const setScheduleId = useLearner((s) => s.setScheduleId);
+  const setTopicContent = useLearner((s) => s.setTopicContent);
 
   useEffect(() => {
     if (!user) return;
@@ -31,6 +32,7 @@ export function useHydrateFromBackend() {
       const sched = await loadActiveSchedule(user.id);
       if (sched && alive) {
         setScheduleId(sched.schedule.id);
+        setTopicContent(sched.content ?? undefined);
         setSchedule(
           sched.blocks.map((b: any) => ({
             id: b.id,
