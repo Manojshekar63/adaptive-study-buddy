@@ -90,6 +90,36 @@ export default function Dashboard() {
         )}
       </motion.div>
 
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="rounded-3xl bg-card border border-border shadow-card p-6 mt-6">
+        <h3 className="font-display font-semibold flex items-center gap-2 mb-4">
+          <Brain className="w-4 h-4 text-accent" /> Your tricky words
+          <span className="text-xs font-normal text-muted-foreground ml-2">— learned from how you read</span>
+        </h3>
+        {tricky.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Tap any word that feels tricky while reading — your reader will remember and break it down for you next time.</p>
+        ) : (
+          <ul className="grid sm:grid-cols-2 gap-2">
+            {tricky.map(([word, v]) => (
+              <li key={word} className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-muted/30 px-4 py-3">
+                <div className="min-w-0">
+                  <div className="font-display font-semibold truncate">{word}</div>
+                  <div className="text-xs text-muted-foreground">
+                    tapped {v.tapCount}× · difficulty {Math.round(v.difficulty * 100)}%
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => { setWordMastered(word, true); setWordMasteredApi(word, true); }}
+                >
+                  Got it
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </motion.div>
+
       <div className="text-center mt-8">
         <Button onClick={() => nav("/study/new")} className="rounded-full px-7">Plan another topic</Button>
       </div>
