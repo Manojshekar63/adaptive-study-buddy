@@ -47,6 +47,8 @@ export function useHydrateFromBackend() {
           }))
         );
       }
+      const words = await loadDifficultWords(user.id);
+      if (alive) setDifficultWords(words);
     })();
     return () => {
       alive = false;
