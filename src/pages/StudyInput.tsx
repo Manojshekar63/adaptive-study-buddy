@@ -175,11 +175,11 @@ export default function StudyInput() {
             )}
             <Button
               size="lg"
-              disabled={!uploaded}
-              onClick={() => generate(uploaded?.replace(/\.\w+$/, "") || "Your notes", "upload")}
+              disabled={!uploaded || uploading}
+              onClick={() => generate(uploaded?.replace(/\.\w+$/, "") || "Your notes", "upload", uploadedText)}
               className="mt-6 w-full rounded-xl gap-2"
             >
-              Build my plan <ArrowRight className="w-4 h-4" />
+              {uploading ? "Reading your notes…" : "Build my plan"} <ArrowRight className="w-4 h-4" />
             </Button>
           </motion.div>
         </TabsContent>
