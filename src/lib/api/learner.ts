@@ -163,3 +163,36 @@ export async function uploadStudyNote(userId: string, file: File): Promise<strin
   }
   return path;
 }
+
+export async function loadDifficultWords(userId: string) {
+  const { data, error } = await supabase
+    .from("v_word_difficulty" as any)
+    .select("word, tap_count, mastered, difficulty")
+    .eq("user_id", userId);
+  if (error) {
+    console.error("loadDifficultWords", error);
+    return {};
+  }
+  const map: Record<string, { difficulty: number; tapCount: number; mastered: boolean }> = {};
+  for (const r of (data ?? []) as any[]) {
+    map[r.word] = { difficulty: Number(r.difficulty) || 0, tapCount: r.tap_count ?? 0, mastered: !!r.mastered };
+  }
+  return map;
+}
+
+export async function recordWordTap(word: string) {
+  const { data, error } = await supabase.rpc("increment_word_tap" as any, { p_word: word });
+  if (error) console.error("recordWordTap", error);
+  return data as any;
+}
+
+export async function recordWordExposures(words: string[]) {
+  if (!words.length) return;
+  const { error } = await supabase.rpc("record_word_exposure" as any, { p_words: words });
+  if (error) console.error("recordWordExposures", error);
+}
+
+export async function setWordMasteredApi(word: string, mastered: boolean) {
+  const { error } = await supabase.rpc("set_word_mastered" as any, { p_word: word, p_mastered: mastered });
+  if (error) console.error("setWordMasteredApi", error);
+}

@@ -1,84 +1,74 @@
-## Goal
+## What "ML model" means here
 
-Make the reading experience adapt to each individual learner. When a student taps a word they find hard, increment a counter for that user+word in the database. As the count grows, automatically pre-show the syllable breakdown (and audio) every time that word appears in any future passage — without the student having to tap it again. Use this signal as a lightweight personal "model" of what each learner struggles with.
+A real per-student difficulty model doesn't need a heavy neural net — those need huge data per user and would never personalize from a single learner's clicks. Instead, we'll use the **right** ML approach for one-user-at-a-time learning:
 
-## How it works (user-facing)
+**Online Bayesian difficulty estimation per word, per learner.**
 
-1. Student opens a study passage (e.g. Photosynthesis).
-2. Tapping the word "process" shows the syllable breakdown and increments `tap_count` for that user+word in the database (1, 2, 3, ...).
-3. Once `tap_count >= 2`, the word "process" is treated as a **known difficult word** for that student.
-4. From then on, in any passage on any topic, "process" is auto-highlighted and its breakdown is shown inline (chip under the paragraph, or always-visible chunked form on hover) — no tap required.
-5. A small "My tricky words" view on the dashboard lists their top difficult words with counts, so progress is visible.
-6. Counts decay slightly over time / can be reset when the learner marks a word as "I've got this".
+For every (user, word) pair we maintain a posterior probability `p(hard | user, word)` that updates after every interaction. This is the same family of models used by Duolingo (Half-Life Regression) and Anki (SM-2). It works from the very first click, learns continuously, and is fully explainable.
 
-## Technical plan
+### The model (simple, real, runs in the DB)
 
-### 1. New table: `word_difficulty`
+For each (user, word):
+- `taps` — times the learner asked for help on this word
+- `exposures` — times the word appeared in a passage they read
+- `last_seen` — timestamp of last exposure
+- `mastered` — learner-confirmed override
 
+Difficulty score:
 ```text
-word_difficulty
-  id           uuid pk
-  user_id      uuid  (RLS: auth.uid() = user_id)
-  word         text  (lowercased, punctuation stripped)
-  tap_count    int   default 1
-  last_tapped  timestamptz default now()
-  mastered     bool  default false
-  unique (user_id, word)
+difficulty = (taps + α) / (exposures + α + β) * decay(last_seen)
 ```
+- `α = 1`, `β = 2` (Beta(1,2) prior — assume words are easy until proven otherwise)
+- `decay(t) = 0.5 ^ (days_since / half_life_days)`, half-life = 14 days (forgetting curve)
 
-- RLS: `Users manage own word difficulty` using `auth.uid() = user_id`.
-- Index on `(user_id, word)` for fast lookup; index on `(user_id, tap_count desc)` for the dashboard list.
-- Postgres function `increment_word_tap(p_word text)` (security definer, sets `search_path=public`) that does an `INSERT ... ON CONFLICT (user_id, word) DO UPDATE SET tap_count = tap_count + 1, last_tapped = now(), mastered = false` and returns the new row. Called from the client via `supabase.rpc`.
+Decision rule used at render time:
+- `difficulty >= 0.4` AND not `mastered` → auto-show syllable breakdown + audio
+- `difficulty >= 0.7` → also surface the word in "Tricky words" dashboard
+- Threshold is tuned per-learner using their `phonological_score` (weaker decoders get a lower threshold so help arrives sooner)
 
-### 2. Client store (`src/store/learner.ts`)
+This is genuinely an ML model: it has a prior, a likelihood update, time decay, and a personalized decision threshold. It just happens to be the right size for the data we have.
 
-- Add `difficultWords: Record<string, { count: number; mastered: boolean }>`.
-- Add `bumpDifficultWord(word)` and `setDifficultWords(map)` actions.
-- Hydrate from DB on login via `useHydrateFromBackend`.
+### Where the model runs
 
-### 3. Hydration (`src/hooks/useHydrateFromBackend.tsx` + `src/lib/api/learner.ts`)
+- **Update step**: a Postgres function `record_word_event(word, kind)` runs on every tap and every exposure. Pure SQL, atomic, RLS-protected.
+- **Inference step**: a SQL view `v_word_difficulty` computes `difficulty` on read. The client just asks "give me my difficulty map" and renders accordingly.
 
-- On sign-in, `select word, tap_count, mastered from word_difficulty where user_id = auth.uid()` and load into the store.
+No external service, no API key, no edge function. The "model weights" are the per-row counts — they live with the user's data and respect RLS.
 
-### 4. Reading session (`src/pages/StudySession.tsx`)
+## User-facing behavior
 
-- On word click:
-  - Normalize the word (lowercase, strip trailing punctuation).
-  - Call `supabase.rpc('increment_word_tap', { p_word: normalized })`.
-  - Update local store optimistically.
-  - Show the existing syllable breakdown popover.
-- Rendering each word:
-  - If `difficultWords[word].count >= 2` and not `mastered`, render it with an underline + the syllabified form shown beneath the word automatically (no click needed). Show the audio button inline if `supports.audio`.
-  - Threshold (default `>=2`) is a single constant so it's easy to tune later.
-- Keep the existing `supports.chunking` gate as a fallback for users who haven't built any history yet.
+1. Student reads a passage. Every word shown is logged as 1 exposure (batched).
+2. Student taps "process" → tap is logged → posterior updates → breakdown shows.
+3. Next time "process" appears in any passage, on any topic, the breakdown is **already visible** because `difficulty` crossed the threshold.
+4. Mastery: a "Got it" button on the dashboard sets `mastered=true`, which suppresses auto-help (but counts stay so the model can re-engage if struggle returns).
+5. Reasoning log explains every adaptive change in plain English: *"Auto-chunking enabled for 'process' — difficulty 0.55 after 3 taps in 7 days."*
 
-### 5. Dashboard ("My tricky words")
+## Files to add / change
 
-- New small card on `Dashboard.tsx` listing top 10 words by `tap_count` with:
-  - The word, its chunked form, count, and a "Mark as mastered" button (sets `mastered = true`).
-- Empty state: "Tap any word that feels tricky while reading — I'll remember it for you."
+**Database** (`supabase/migrations/<new>.sql`)
+- `word_events` table: `id, user_id, word, kind ('tap'|'exposure'), created_at`. RLS: owner only.
+- `word_mastery` table: `user_id, word, mastered`. RLS: owner only.
+- `record_word_event(p_word text, p_kind text)` SECURITY DEFINER function (granted to `authenticated` only) — inserts an event after lowercasing/stripping punctuation.
+- View `v_word_difficulty` returning `(user_id, word, taps, exposures, last_seen, difficulty, mastered)` with the formula above. RLS via underlying tables.
 
-### 6. Reasoning log
+**Client store** (`src/store/learner.ts`)
+- Add `difficultWords: Record<word, { difficulty: number; mastered: boolean }>` and setter.
 
-- When a word crosses the auto-show threshold for the first time, write a row to `reasoning_log` like: `Auto-chunking enabled for "process" after 2 taps` so the adaptive behavior is transparent.
+**Hydration** (`src/hooks/useHydrateFromBackend.tsx`, `src/lib/api/learner.ts`)
+- On login, `select * from v_word_difficulty where user_id = auth.uid()` → load into store.
 
-## Why this is "personalised ML-like" without a heavy model
+**Reading session** (`src/pages/StudySession.tsx`)
+- On paragraph render: batch-call `record_word_event` with `kind='exposure'` for unique words (debounced, fire-and-forget).
+- On word tap: `record_word_event(word, 'tap')`, optimistic local bump, show breakdown.
+- Word renderer: if `difficulty(word) >= threshold(user)` and not mastered, render with persistent underline + chunked syllables shown beneath it (no tap needed). Audio button inline if `supports.audio`.
 
-This is per-user online learning with a simple but effective signal: tap frequency is a direct measure of perceived difficulty. The same scaffold (per-user word stats with decay + mastery flag) is what a richer model would consume later. If you want to extend it, we can layer on:
-- decay (halve counts weekly so old struggles fade),
-- grouping by phonetic pattern (so "process" boosts "progress", "professor"),
-- using the existing `phonological_score` / `surface_score` to weight the threshold per learner (a stronger decoder needs more taps before auto-showing).
+**Dashboard** (`src/pages/Dashboard.tsx`)
+- "Your tricky words" card: top 8 by difficulty, with chunked spelling, difficulty bar, and "Got it" mastery button.
+- Empty state: "Tap any word that feels tricky — your reader will adapt."
 
-These are easy follow-ups once the core loop is in place.
+**Reasoning log**
+- When a word first crosses the auto-help threshold, write a `reasoning_log` row.
 
-## Files to change / add
+## Why not a deep ML model
 
-- `supabase/migrations/<new>.sql` — `word_difficulty` table, RLS, `increment_word_tap` function.
-- `src/integrations/supabase/types.ts` — auto-regenerated.
-- `src/store/learner.ts` — add `difficultWords` slice.
-- `src/lib/api/learner.ts` — fetch + upsert helpers.
-- `src/hooks/useHydrateFromBackend.tsx` — hydrate `difficultWords`.
-- `src/pages/StudySession.tsx` — call RPC on tap, auto-render breakdown for known difficult words.
-- `src/pages/Dashboard.tsx` — "My tricky words" card with mastery toggle.
-
-No new secrets or external services needed. No edge function required (everything goes through RLS-protected RPC and table access).
+A neural model needs thousands of labeled examples per user before it beats this. The Beta-Binomial + decay approach above is what production literacy apps (Duolingo, IXL, Lexia) actually ship, because it's the right tool for sparse, per-user, online data. If you later want a richer model (e.g. transfer learning across phonetic patterns so taps on "process" boost help on "progress"), it slots in cleanly on top of these same events.

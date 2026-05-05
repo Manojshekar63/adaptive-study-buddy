@@ -4,8 +4,12 @@ import { useLearner } from "@/store/learner";
 import { PRESET_TOPICS } from "@/lib/content";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
-import { Volume2, ArrowRight, Eye, Focus } from "lucide-react";
+import { Volume2, ArrowRight, Eye, Focus, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { recordWordTap, recordWordExposures } from "@/lib/api/learner";
+
+const AUTO_HELP_THRESHOLD = 0.4;
+const norm = (w: string) => w.toLowerCase().replace(/[^a-z']/g, "");
 
 function syllabify(word: string): string[] {
   // naive friendly chunker for demo
@@ -28,10 +32,12 @@ function syllabify(word: string): string[] {
 
 export default function StudySession() {
   const nav = useNavigate();
-  const { schedule, currentBlockId, topic, uploadedName, topicContent, decoding, log } = useLearner();
+  const { schedule, currentBlockId, topic, uploadedName, topicContent, decoding, log, difficultWords, bumpWordTap } = useLearner();
   const block = schedule.find((b) => b.id === currentBlockId) ?? schedule.find((b) => b.kind === "study" && !b.done);
 
   const supports = block?.supports ?? { audio: decoding.phonological >= 2, chunking: decoding.phonological >= 1 };
+  // Personalize threshold: weaker decoders get help sooner
+  const threshold = Math.max(0.25, AUTO_HELP_THRESHOLD - decoding.phonological * 0.05);
 
   const content = useMemo(() => {
     if (topicContent?.paragraphs?.length) return topicContent;
@@ -51,14 +57,35 @@ export default function StudySession() {
   const para = paragraphs[pIdx];
   const words = para.split(/\s+/);
 
+  // Record exposures for unique long words in this paragraph (fire-and-forget)
+  useEffect(() => {
+    const unique = Array.from(new Set(words.map(norm).filter((w) => w.length >= 4)));
+    if (unique.length) recordWordExposures(unique);
+  }, [pIdx]);
+
+  const isAutoHelp = (w: string) => {
+    const entry = difficultWords[norm(w)];
+    return !!entry && !entry.mastered && entry.difficulty >= threshold;
+  };
+
   const next = () => {
     if (pIdx + 1 >= paragraphs.length) { nav("/study/feedback"); return; }
     setPIdx(pIdx + 1); setActiveWord(null); setBreakdown(null);
   };
 
   const onWordClick = (w: string) => {
-    if (!supports.chunking) return;
-    setBreakdown({ word: w.replace(/[.,!?;:]$/, ""), pieces: syllabify(w.replace(/[.,!?;:]$/, "")) });
+    const clean = w.replace(/[.,!?;:]$/, "");
+    setBreakdown({ word: clean, pieces: syllabify(clean) });
+    const n = norm(clean);
+    if (n.length >= 2) {
+      const before = difficultWords[n];
+      bumpWordTap(clean);
+      recordWordTap(clean);
+      const newCount = (before?.tapCount ?? 0) + 1;
+      if (newCount === 2) {
+        log(`Auto-chunking enabled for "${n}" — model marked it as a tricky word.`, "personalize");
+      }
+    }
   };
 
   return (
@@ -94,19 +121,30 @@ export default function StudySession() {
             transition={{ duration: 0.4 }}
             className="text-2xl sm:text-3xl leading-[1.7] reading-width text-foreground/90"
           >
-            {words.map((w, i) => (
-              <span
-                key={i}
-                onMouseEnter={() => setActiveWord(i)}
-                onMouseLeave={() => setActiveWord((c) => (c === i ? null : c))}
-                onClick={() => onWordClick(w)}
-                className={`cursor-pointer rounded px-0.5 transition-colors ${
-                  activeWord === i ? "bg-accent-soft text-accent-foreground" : ""
-                } ${supports.chunking ? "hover:bg-primary-soft" : ""}`}
-              >
-                {w}{" "}
-              </span>
-            ))}
+            {words.map((w, i) => {
+              const auto = isAutoHelp(w);
+              const pieces = auto ? syllabify(w.replace(/[.,!?;:]$/, "")) : null;
+              return (
+                <span
+                  key={i}
+                  onMouseEnter={() => setActiveWord(i)}
+                  onMouseLeave={() => setActiveWord((c) => (c === i ? null : c))}
+                  onClick={() => onWordClick(w)}
+                  className={`cursor-pointer rounded px-0.5 transition-colors ${
+                    activeWord === i ? "bg-accent-soft text-accent-foreground" : ""
+                  } ${auto ? "underline decoration-accent decoration-2 underline-offset-4" : "hover:bg-primary-soft"}`}
+                  title={auto ? "Your reader learned this word is tricky for you" : "Tap to break into sounds"}
+                >
+                  {w}
+                  {auto && pieces && pieces.length > 1 && (
+                    <span className="ml-1 text-[0.6em] align-middle text-accent font-semibold">
+                      [{pieces.join("·")}]
+                    </span>
+                  )}
+                  {" "}
+                </span>
+              );
+            })}
           </motion.p>
         </AnimatePresence>
 

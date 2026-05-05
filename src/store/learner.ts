@@ -45,6 +45,7 @@ interface LearnerState {
   uploadedName?: string;
   scheduleId?: string;
   topicContent?: { title: string; paragraphs: string[] };
+  difficultWords: Record<string, { difficulty: number; tapCount: number; mastered: boolean }>;
   schedule: ScheduleBlock[];
   currentBlockId?: string;
   history: SessionRecord[];
@@ -64,6 +65,9 @@ interface LearnerState {
   setCurrentBlock: (id?: string) => void;
   recordSession: (rec: SessionRecord) => void;
   applyAdaptation: (next: ScheduleBlock[]) => void;
+  setDifficultWords: (m: LearnerState["difficultWords"]) => void;
+  bumpWordTap: (word: string) => void;
+  setWordMastered: (word: string, mastered: boolean) => void;
   log: (message: string, tag?: string) => void;
   toggleReasoning: (v?: boolean) => void;
   setTour: (v: boolean) => void;
@@ -87,6 +91,7 @@ const initial = {
   reasoning: [] as ReasoningEntry[],
   reasoningOpen: false,
   tourActive: false,
+  difficultWords: {} as Record<string, { difficulty: number; tapCount: number; mastered: boolean }>,
 };
 
 export const useLearner = create<LearnerState>()(
@@ -121,6 +126,26 @@ export const useLearner = create<LearnerState>()(
             { id: crypto.randomUUID(), at: Date.now(), message, tag },
           ],
         })),
+      setDifficultWords: (m) => set({ difficultWords: m }),
+      bumpWordTap: (word) => {
+        const w = word.toLowerCase().replace(/[^a-z']/g, "");
+        if (!w) return;
+        set((s) => {
+          const cur = s.difficultWords[w] ?? { difficulty: 0, tapCount: 0, mastered: false };
+          const tapCount = cur.tapCount + 1;
+          // optimistic Beta(1,2) estimate (no exposure data client-side)
+          const difficulty = Math.min(1, (tapCount + 1) / (tapCount + 4));
+          return { difficultWords: { ...s.difficultWords, [w]: { difficulty, tapCount, mastered: false } } };
+        });
+      },
+      setWordMastered: (word, mastered) => {
+        const w = word.toLowerCase().replace(/[^a-z']/g, "");
+        set((s) => {
+          const cur = s.difficultWords[w];
+          if (!cur) return s;
+          return { difficultWords: { ...s.difficultWords, [w]: { ...cur, mastered } } };
+        });
+      },
       toggleReasoning: (v) => set((s) => ({ reasoningOpen: v ?? !s.reasoningOpen })),
       setTour: (v) => set({ tourActive: v }),
       reset: () => set({ ...initial }),

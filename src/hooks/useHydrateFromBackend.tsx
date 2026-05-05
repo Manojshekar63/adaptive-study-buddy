@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useLearner } from "@/store/learner";
-import { loadLearnerProfile, loadActiveSchedule } from "@/lib/api/learner";
+import { loadLearnerProfile, loadActiveSchedule, loadDifficultWords } from "@/lib/api/learner";
 
 /** Hydrate Zustand store from Supabase once user is logged in. */
 export function useHydrateFromBackend() {
@@ -11,6 +11,7 @@ export function useHydrateFromBackend() {
   const setSchedule = useLearner((s) => s.setSchedule);
   const setScheduleId = useLearner((s) => s.setScheduleId);
   const setTopicContent = useLearner((s) => s.setTopicContent);
+  const setDifficultWords = useLearner((s) => s.setDifficultWords);
 
   useEffect(() => {
     if (!user) return;
@@ -46,6 +47,8 @@ export function useHydrateFromBackend() {
           }))
         );
       }
+      const words = await loadDifficultWords(user.id);
+      if (alive) setDifficultWords(words);
     })();
     return () => {
       alive = false;
