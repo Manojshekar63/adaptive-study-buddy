@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { useLearner, Fatigue } from "@/store/learner";
+import { useAuth } from "@/hooks/useAuth";
+import { upsertLearnerProfile, logReasoning } from "@/lib/api/learner";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRight, Battery, BatteryLow, BatteryMedium, BatteryFull } from "lucide-react";
 
