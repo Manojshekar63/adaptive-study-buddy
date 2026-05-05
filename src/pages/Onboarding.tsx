@@ -19,6 +19,7 @@ const FATIGUE: { v: Fatigue; label: string; icon: any }[] = [
 export default function Onboarding() {
   const nav = useNavigate();
   const { setOnboarding, log } = useLearner();
+  const { user } = useAuth();
   const [step, setStep] = useState(0);
   const [name, setName] = useState("");
   const [goal, setGoal] = useState("");
@@ -29,9 +30,15 @@ export default function Onboarding() {
   const steps = ["Your name", "Your goal", "Subjects", "Time today", "Energy level"];
   const next = () => setStep((s) => s + 1);
 
-  const finish = () => {
+  const finish = async () => {
     setOnboarding({ name, goal, subjects, availableMin: time, fatigue });
     log(`Profile saved · ${time} min available · fatigue ${fatigue}/4`, "onboarding");
+    if (user) {
+      await upsertLearnerProfile(user.id, {
+        name, goal, subjects, available_min: time, fatigue,
+      });
+      await logReasoning(user.id, `Profile saved · ${time} min available · fatigue ${fatigue}/4`, "onboarding");
+    }
     nav("/assess/reading");
   };
 
