@@ -25,7 +25,7 @@ export default function StudyInput() {
 
   const presets = Object.keys(PRESET_TOPICS);
 
-  const generate = async (chosenTopic: string, source: "topic" | "upload" = "topic") => {
+  const generate = async (chosenTopic: string, source: "topic" | "upload" = "topic", sourceText?: string) => {
     const { blocks, reasons } = buildSchedule({
       topic: chosenTopic,
       availableMin,
@@ -38,8 +38,8 @@ export default function StudyInput() {
     reasons.forEach((r) => log(r, "schedule"));
     log(`Built ${blocks.length}-block plan for "${chosenTopic}"`, "schedule");
 
-    // Use preset content instantly when available, otherwise generate via AI
-    const preset = PRESET_TOPICS[chosenTopic];
+    // Use preset only for topic mode when there's an exact match. Uploads always personalize.
+    const preset = source === "topic" ? PRESET_TOPICS[chosenTopic] : undefined;
     if (preset) {
       setTopicContent(preset);
     } else {
@@ -60,7 +60,9 @@ export default function StudyInput() {
     if (!preset) {
       toast.message("Preparing your reading…");
       supabase.functions
-        .invoke("generate-content", { body: { topic: chosenTopic, scheduleId } })
+        .invoke("generate-content", {
+          body: { topic: chosenTopic, scheduleId, sourceText: sourceText?.slice(0, 12000) },
+        })
         .then(({ data, error }) => {
           if (error) {
             const status = (error as any).context?.status;
@@ -84,13 +86,24 @@ export default function StudyInput() {
     if (!f) return;
     setUploadedLocal(f.name);
     setUploaded(f.name);
-    if (user) {
-      setUploading(true);
-      const path = await uploadStudyNote(user.id, f);
-      setUploading(false);
-      if (!path) toast.error("Upload failed — using filename only");
-      else toast.success("Notes uploaded");
+    setUploading(true);
+    let extracted = "";
+    try {
+      extracted = await extractFileText(f);
+    } catch (err) {
+      console.error("extract", err);
     }
+    setUploadedText(extracted);
+    if (extracted.length < 40) {
+      toast.warning("Couldn't read text from this file — we'll use the filename as the topic.");
+    } else {
+      toast.success("Notes read · personalizing your study");
+    }
+    if (user) {
+      const path = await uploadStudyNote(user.id, f);
+      if (!path) toast.error("Saving file failed — continuing anyway");
+    }
+    setUploading(false);
   };
 
   return (
