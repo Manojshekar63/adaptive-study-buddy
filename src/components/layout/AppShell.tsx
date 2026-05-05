@@ -1,6 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
-import { Brain, Sparkles, PlayCircle } from "lucide-react";
+import { Brain, Sparkles, PlayCircle, LogIn, LogOut } from "lucide-react";
 import { useLearner } from "@/store/learner";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { ReasoningPanel } from "./ReasoningPanel";
 import { DemoTour } from "./DemoTour";
@@ -8,6 +9,7 @@ import { ReactNode } from "react";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { reasoningOpen, toggleReasoning, setTour, tourActive } = useLearner();
+  const { user, signOut } = useAuth();
   const loc = useLocation();
   const onLanding = loc.pathname === "/";
 
@@ -46,6 +48,19 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Sparkles className="w-4 h-4" />
               <span className="hidden sm:inline">AI reasoning</span>
             </Button>
+            {user ? (
+              <Button variant="ghost" size="sm" onClick={signOut} className="gap-2">
+                <LogOut className="w-4 h-4" />
+                <span className="hidden sm:inline">Sign out</span>
+              </Button>
+            ) : (
+              <Button asChild variant="ghost" size="sm" className="gap-2">
+                <Link to="/auth">
+                  <LogIn className="w-4 h-4" />
+                  <span className="hidden sm:inline">Sign in</span>
+                </Link>
+              </Button>
+            )}
           </nav>
         </div>
       </header>
