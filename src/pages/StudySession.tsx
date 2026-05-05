@@ -121,19 +121,30 @@ export default function StudySession() {
             transition={{ duration: 0.4 }}
             className="text-2xl sm:text-3xl leading-[1.7] reading-width text-foreground/90"
           >
-            {words.map((w, i) => (
-              <span
-                key={i}
-                onMouseEnter={() => setActiveWord(i)}
-                onMouseLeave={() => setActiveWord((c) => (c === i ? null : c))}
-                onClick={() => onWordClick(w)}
-                className={`cursor-pointer rounded px-0.5 transition-colors ${
-                  activeWord === i ? "bg-accent-soft text-accent-foreground" : ""
-                } ${supports.chunking ? "hover:bg-primary-soft" : ""}`}
-              >
-                {w}{" "}
-              </span>
-            ))}
+            {words.map((w, i) => {
+              const auto = isAutoHelp(w);
+              const pieces = auto ? syllabify(w.replace(/[.,!?;:]$/, "")) : null;
+              return (
+                <span
+                  key={i}
+                  onMouseEnter={() => setActiveWord(i)}
+                  onMouseLeave={() => setActiveWord((c) => (c === i ? null : c))}
+                  onClick={() => onWordClick(w)}
+                  className={`cursor-pointer rounded px-0.5 transition-colors ${
+                    activeWord === i ? "bg-accent-soft text-accent-foreground" : ""
+                  } ${auto ? "underline decoration-accent decoration-2 underline-offset-4" : "hover:bg-primary-soft"}`}
+                  title={auto ? "Your reader learned this word is tricky for you" : "Tap to break into sounds"}
+                >
+                  {w}
+                  {auto && pieces && pieces.length > 1 && (
+                    <span className="ml-1 text-[0.6em] align-middle text-accent font-semibold">
+                      [{pieces.join("·")}]
+                    </span>
+                  )}
+                  {" "}
+                </span>
+              );
+            })}
           </motion.p>
         </AnimatePresence>
 
