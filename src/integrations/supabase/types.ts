@@ -14,7 +14,222 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      learner_profiles: {
+        Row: {
+          available_min: number
+          decoding_trials: number
+          fatigue: number
+          goal: string | null
+          name: string | null
+          phonological_score: number
+          reading_speed: string | null
+          subjects: string[]
+          surface_score: number
+          updated_at: string
+          user_id: string
+          wpm: number | null
+        }
+        Insert: {
+          available_min?: number
+          decoding_trials?: number
+          fatigue?: number
+          goal?: string | null
+          name?: string | null
+          phonological_score?: number
+          reading_speed?: string | null
+          subjects?: string[]
+          surface_score?: number
+          updated_at?: string
+          user_id: string
+          wpm?: number | null
+        }
+        Update: {
+          available_min?: number
+          decoding_trials?: number
+          fatigue?: number
+          goal?: string | null
+          name?: string | null
+          phonological_score?: number
+          reading_speed?: string | null
+          subjects?: string[]
+          surface_score?: number
+          updated_at?: string
+          user_id?: string
+          wpm?: number | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      reasoning_log: {
+        Row: {
+          created_at: string
+          id: string
+          message: string
+          schedule_id: string | null
+          tag: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message: string
+          schedule_id?: string | null
+          tag?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string
+          schedule_id?: string | null
+          tag?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reasoning_log_schedule_id_fkey"
+            columns: ["schedule_id"]
+            isOneToOne: false
+            referencedRelation: "schedules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      schedule_blocks: {
+        Row: {
+          created_at: string
+          done: boolean
+          id: string
+          kind: string
+          minutes: number
+          modified: boolean
+          position: number
+          reasons: string[]
+          schedule_id: string
+          supports: Json
+          title: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          done?: boolean
+          id?: string
+          kind: string
+          minutes: number
+          modified?: boolean
+          position: number
+          reasons?: string[]
+          schedule_id: string
+          supports?: Json
+          title: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          done?: boolean
+          id?: string
+          kind?: string
+          minutes?: number
+          modified?: boolean
+          position?: number
+          reasons?: string[]
+          schedule_id?: string
+          supports?: Json
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "schedule_blocks_schedule_id_fkey"
+            columns: ["schedule_id"]
+            isOneToOne: false
+            referencedRelation: "schedules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      schedules: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          source: string
+          topic: string
+          user_id: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          source?: string
+          topic: string
+          user_id: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          source?: string
+          topic?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      study_sessions: {
+        Row: {
+          block_id: string | null
+          completed_at: string
+          difficulty: string
+          duration_sec: number | null
+          id: string
+          user_id: string
+        }
+        Insert: {
+          block_id?: string | null
+          completed_at?: string
+          difficulty: string
+          duration_sec?: number | null
+          id?: string
+          user_id: string
+        }
+        Update: {
+          block_id?: string | null
+          completed_at?: string
+          difficulty?: string
+          duration_sec?: number | null
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "study_sessions_block_id_fkey"
+            columns: ["block_id"]
+            isOneToOne: false
+            referencedRelation: "schedule_blocks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
