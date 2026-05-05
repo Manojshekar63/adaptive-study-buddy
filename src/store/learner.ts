@@ -126,6 +126,26 @@ export const useLearner = create<LearnerState>()(
             { id: crypto.randomUUID(), at: Date.now(), message, tag },
           ],
         })),
+      setDifficultWords: (m) => set({ difficultWords: m }),
+      bumpWordTap: (word) => {
+        const w = word.toLowerCase().replace(/[^a-z']/g, "");
+        if (!w) return;
+        set((s) => {
+          const cur = s.difficultWords[w] ?? { difficulty: 0, tapCount: 0, mastered: false };
+          const tapCount = cur.tapCount + 1;
+          // optimistic Beta(1,2) estimate (no exposure data client-side)
+          const difficulty = Math.min(1, (tapCount + 1) / (tapCount + 4));
+          return { difficultWords: { ...s.difficultWords, [w]: { difficulty, tapCount, mastered: false } } };
+        });
+      },
+      setWordMastered: (word, mastered) => {
+        const w = word.toLowerCase().replace(/[^a-z']/g, "");
+        set((s) => {
+          const cur = s.difficultWords[w];
+          if (!cur) return s;
+          return { difficultWords: { ...s.difficultWords, [w]: { ...cur, mastered } } };
+        });
+      },
       toggleReasoning: (v) => set((s) => ({ reasoningOpen: v ?? !s.reasoningOpen })),
       setTour: (v) => set({ tourActive: v }),
       reset: () => set({ ...initial }),
