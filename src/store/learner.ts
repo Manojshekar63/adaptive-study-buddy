@@ -44,6 +44,7 @@ interface LearnerState {
   topic?: string;
   uploadedName?: string;
   scheduleId?: string;
+  topicContent?: { title: string; paragraphs: string[] };
   schedule: ScheduleBlock[];
   currentBlockId?: string;
   history: SessionRecord[];
@@ -58,6 +59,7 @@ interface LearnerState {
   setTopic: (t: string) => void;
   setUploaded: (n: string) => void;
   setScheduleId: (id?: string) => void;
+  setTopicContent: (c?: { title: string; paragraphs: string[] }) => void;
   setSchedule: (s: ScheduleBlock[]) => void;
   setCurrentBlock: (id?: string) => void;
   recordSession: (rec: SessionRecord) => void;
@@ -107,6 +109,7 @@ export const useLearner = create<LearnerState>()(
       setTopic: (t) => set({ topic: t, uploadedName: undefined }),
       setUploaded: (n) => set({ uploadedName: n, topic: undefined }),
       setScheduleId: (id) => set({ scheduleId: id }),
+      setTopicContent: (c) => set({ topicContent: c }),
       setSchedule: (s) => set({ schedule: s }),
       setCurrentBlock: (id) => set({ currentBlockId: id }),
       recordSession: (rec) => set((s) => ({ history: [...s.history, rec] })),

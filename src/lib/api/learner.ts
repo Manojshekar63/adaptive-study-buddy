@@ -96,7 +96,7 @@ export async function loadActiveSchedule(userId: string) {
     .select("*")
     .eq("schedule_id", sched.id)
     .order("position");
-  return { schedule: sched, blocks: blocks ?? [] };
+  return { schedule: sched, blocks: blocks ?? [], content: (sched as any).content ?? null };
 }
 
 export async function replaceScheduleBlocks(
