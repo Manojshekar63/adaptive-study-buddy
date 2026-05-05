@@ -266,6 +266,60 @@ export type Database = {
         }
         Relationships: []
       }
+      word_event: {
+        Row: {
+          created_at: string
+          features: number[]
+          id: string
+          label: number
+          predicted_p: number
+          user_id: string
+          word: string
+        }
+        Insert: {
+          created_at?: string
+          features: number[]
+          id?: string
+          label: number
+          predicted_p: number
+          user_id: string
+          word: string
+        }
+        Update: {
+          created_at?: string
+          features?: number[]
+          id?: string
+          label?: number
+          predicted_p?: number
+          user_id?: string
+          word?: string
+        }
+        Relationships: []
+      }
+      word_model: {
+        Row: {
+          bias: number
+          trained_n: number
+          updated_at: string
+          user_id: string
+          weights: number[]
+        }
+        Insert: {
+          bias?: number
+          trained_n?: number
+          updated_at?: string
+          user_id: string
+          weights?: number[]
+        }
+        Update: {
+          bias?: number
+          trained_n?: number
+          updated_at?: string
+          user_id?: string
+          weights?: number[]
+        }
+        Relationships: []
+      }
     }
     Views: {
       v_word_difficulty: {
@@ -300,6 +354,10 @@ export type Database = {
       }
     }
     Functions: {
+      extract_word_features: {
+        Args: { p_user: string; p_word: string }
+        Returns: number[]
+      }
       increment_word_tap: {
         Args: { p_word: string }
         Returns: {
@@ -319,9 +377,26 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      predict_words_difficulty: {
+        Args: { p_words: string[] }
+        Returns: {
+          p: number
+          source: string
+          word: string
+        }[]
+      }
       record_word_exposure: { Args: { p_words: string[] }; Returns: undefined }
+      reset_word_model: { Args: never; Returns: undefined }
       set_word_mastered: {
         Args: { p_mastered: boolean; p_word: string }
+        Returns: undefined
+      }
+      update_word_model: {
+        Args: { p_label: number; p_word: string }
+        Returns: number
+      }
+      update_word_model_batch: {
+        Args: { p_label: number; p_words: string[] }
         Returns: undefined
       }
     }
