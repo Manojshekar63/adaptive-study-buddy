@@ -35,8 +35,7 @@ export async function saveSchedule(
   topic: string,
   source: "topic" | "upload",
   blocks: ScheduleBlock[]
-): Promise<string | null> {
-  // Deactivate previous schedules
+): Promise<{ scheduleId: string; blocks: ScheduleBlock[] } | null> {
   await supabase.from("schedules").update({ active: false }).eq("user_id", userId).eq("active", true);
 
   const { data: sched, error } = await supabase
@@ -60,9 +59,26 @@ export async function saveSchedule(
     modified: !!b.modified,
     done: !!b.done,
   }));
-  const { error: bErr } = await supabase.from("schedule_blocks").insert(rows);
-  if (bErr) console.error("saveSchedule blocks", bErr);
-  return sched.id;
+  const { data: inserted, error: bErr } = await supabase
+    .from("schedule_blocks")
+    .insert(rows)
+    .select()
+    .order("position");
+  if (bErr || !inserted) {
+    console.error("saveSchedule blocks", bErr);
+    return { scheduleId: sched.id, blocks };
+  }
+  const remapped: ScheduleBlock[] = inserted.map((r: any) => ({
+    id: r.id,
+    kind: r.kind,
+    title: r.title,
+    minutes: r.minutes,
+    reasons: r.reasons ?? [],
+    supports: r.supports ?? {},
+    modified: r.modified,
+    done: r.done,
+  }));
+  return { scheduleId: sched.id, blocks: remapped };
 }
 
 export async function loadActiveSchedule(userId: string) {
