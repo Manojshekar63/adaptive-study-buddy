@@ -35,11 +35,11 @@ export default function StudyInput() {
     reasons.forEach((r) => log(r, "schedule"));
     log(`Built ${blocks.length}-block plan for "${chosenTopic}"`, "schedule");
     if (user) {
-      const sid = await saveSchedule(user.id, chosenTopic, source, blocks);
-      if (sid) {
-        setScheduleId(sid);
-        // refresh local IDs from DB so updates target real rows
-        for (const r of reasons) await logReasoning(user.id, r, "schedule", sid);
+      const result = await saveSchedule(user.id, chosenTopic, source, blocks);
+      if (result) {
+        setScheduleId(result.scheduleId);
+        setSchedule(result.blocks);
+        for (const r of reasons) await logReasoning(user.id, r, "schedule", result.scheduleId);
       }
     }
     nav("/schedule");
