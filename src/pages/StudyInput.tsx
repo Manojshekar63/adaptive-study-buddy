@@ -4,20 +4,25 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useLearner } from "@/store/learner";
+import { useAuth } from "@/hooks/useAuth";
+import { saveSchedule, uploadStudyNote, logReasoning } from "@/lib/api/learner";
 import { buildSchedule } from "@/lib/scheduleEngine";
 import { PRESET_TOPICS } from "@/lib/content";
 import { Upload, FileText, Sparkles, ArrowRight, X } from "lucide-react";
 import { motion } from "framer-motion";
+import { toast } from "sonner";
 
 export default function StudyInput() {
   const nav = useNavigate();
-  const { setTopic, setUploaded, setSchedule, log, availableMin, readingSpeed, fatigue, decoding } = useLearner();
+  const { setTopic, setUploaded, setSchedule, setScheduleId, log, availableMin, readingSpeed, fatigue, decoding } = useLearner();
+  const { user } = useAuth();
   const [topic, setTopicLocal] = useState("");
   const [uploaded, setUploadedLocal] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const presets = Object.keys(PRESET_TOPICS);
 
-  const generate = (chosenTopic: string) => {
+  const generate = async (chosenTopic: string, source: "topic" | "upload" = "topic") => {
     const { blocks, reasons } = buildSchedule({
       topic: chosenTopic,
       availableMin,
@@ -29,14 +34,29 @@ export default function StudyInput() {
     setSchedule(blocks);
     reasons.forEach((r) => log(r, "schedule"));
     log(`Built ${blocks.length}-block plan for "${chosenTopic}"`, "schedule");
+    if (user) {
+      const result = await saveSchedule(user.id, chosenTopic, source, blocks);
+      if (result) {
+        setScheduleId(result.scheduleId);
+        setSchedule(result.blocks);
+        for (const r of reasons) await logReasoning(user.id, r, "schedule", result.scheduleId);
+      }
+    }
     nav("/schedule");
   };
 
-  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
     setUploadedLocal(f.name);
     setUploaded(f.name);
+    if (user) {
+      setUploading(true);
+      const path = await uploadStudyNote(user.id, f);
+      setUploading(false);
+      if (!path) toast.error("Upload failed — using filename only");
+      else toast.success("Notes uploaded");
+    }
   };
 
   return (
@@ -109,7 +129,7 @@ export default function StudyInput() {
             <Button
               size="lg"
               disabled={!uploaded}
-              onClick={() => generate(uploaded?.replace(/\.\w+$/, "") || "Your notes")}
+              onClick={() => generate(uploaded?.replace(/\.\w+$/, "") || "Your notes", "upload")}
               className="mt-6 w-full rounded-xl gap-2"
             >
               Build my plan <ArrowRight className="w-4 h-4" />

@@ -1,30 +1,78 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLearner } from "@/store/learner";
+import { useAuth } from "@/hooks/useAuth";
 import { adapt } from "@/lib/scheduleEngine";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 import { Coffee, BookOpen, RotateCcw, Sparkles, ArrowRight } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  replaceScheduleBlocks,
+  recordSession as recordSessionDB,
+  logReasoning,
+} from "@/lib/api/learner";
 
 type Diff = "easy" | "medium" | "hard";
 
 export default function Feedback() {
   const nav = useNavigate();
-  const { schedule, currentBlockId, applyAdaptation, recordSession, log } = useLearner();
+  const { schedule, currentBlockId, scheduleId, topic, applyAdaptation, recordSession, log, setScheduleId, setSchedule } = useLearner();
+  const { user } = useAuth();
   const [picked, setPicked] = useState<Diff | null>(null);
   const [explanation, setExplanation] = useState<string>("");
 
   const block = schedule.find((b) => b.id === currentBlockId) ?? schedule.find((b) => b.kind === "study" && !b.done);
 
-  const choose = (d: Diff) => {
+  const choose = async (d: Diff) => {
     if (!block) return;
-    const { next, explanation } = adapt(schedule, block.id, d);
+    const { next, explanation: localExp } = adapt(schedule, block.id, d);
     applyAdaptation(next);
     recordSession({ blockId: block.id, difficulty: d, at: Date.now() });
     setPicked(d);
-    setExplanation(explanation);
-    log(`Feedback: ${d} · ${explanation}`, "adaptation");
+    setExplanation(localExp);
+    log(`Feedback: ${d} · ${localExp}`, "adaptation");
+
+    if (user) {
+      await recordSessionDB(user.id, block.id, d);
+      if (scheduleId) {
+        await replaceScheduleBlocks(user.id, scheduleId, next);
+        // reload to get fresh IDs
+        const { data: fresh } = await supabase
+          .from("schedule_blocks")
+          .select("*")
+          .eq("schedule_id", scheduleId)
+          .order("position");
+        if (fresh) {
+          setSchedule(
+            fresh.map((b: any) => ({
+              id: b.id,
+              kind: b.kind,
+              title: b.title,
+              minutes: b.minutes,
+              reasons: b.reasons ?? [],
+              supports: b.supports ?? {},
+              modified: b.modified,
+              done: b.done,
+            }))
+          );
+        }
+        await logReasoning(user.id, `Feedback: ${d} · ${localExp}`, "adaptation", scheduleId);
+      }
+
+      // Ask AI for warmer explanation (non-blocking-ish)
+      try {
+        const { data } = await supabase.functions.invoke("ai-explain", {
+          body: { difficulty: d, topic, fallback: localExp },
+        });
+        if (data?.explanation) setExplanation(data.explanation);
+      } catch (e) {
+        console.error("ai-explain", e);
+      }
+    }
   };
+  // keep setScheduleId reference to avoid TS unused warn
+  void setScheduleId;
 
   const iconFor = (k: string) => k === "study" ? BookOpen : k === "break" ? Coffee : RotateCcw;
   const colorFor = (k: string) =>

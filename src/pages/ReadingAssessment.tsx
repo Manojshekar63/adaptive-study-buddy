@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { useLearner, ReadingSpeed } from "@/store/learner";
+import { useAuth } from "@/hooks/useAuth";
+import { upsertLearnerProfile } from "@/lib/api/learner";
 import { ASSESSMENT_PARAGRAPH } from "@/lib/content";
 import { motion } from "framer-motion";
 import { Check, Timer } from "lucide-react";
@@ -9,6 +11,7 @@ import { Check, Timer } from "lucide-react";
 export default function ReadingAssessment() {
   const nav = useNavigate();
   const { setReading } = useLearner();
+  const { user } = useAuth();
   const [started, setStarted] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [result, setResult] = useState<{ wpm: number; speed: ReadingSpeed } | null>(null);
@@ -28,6 +31,7 @@ export default function ReadingAssessment() {
     const speed: ReadingSpeed = wpm < 140 ? "slow" : wpm > 220 ? "fast" : "medium";
     setReading(wpm, speed);
     setResult({ wpm, speed });
+    if (user) upsertLearnerProfile(user.id, { wpm, reading_speed: speed });
   };
 
   const speedCopy: Record<ReadingSpeed, string> = {
