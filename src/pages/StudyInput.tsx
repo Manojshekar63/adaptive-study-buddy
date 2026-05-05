@@ -12,6 +12,7 @@ import { Upload, FileText, Sparkles, ArrowRight, X } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { extractFileText } from "@/lib/pdfText";
 
 export default function StudyInput() {
   const nav = useNavigate();
@@ -19,6 +20,7 @@ export default function StudyInput() {
   const { user } = useAuth();
   const [topic, setTopicLocal] = useState("");
   const [uploaded, setUploadedLocal] = useState<string | null>(null);
+  const [uploadedText, setUploadedText] = useState<string>("");
   const [uploading, setUploading] = useState(false);
 
   const presets = Object.keys(PRESET_TOPICS);
