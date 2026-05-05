@@ -181,18 +181,39 @@ export async function loadDifficultWords(userId: string) {
 }
 
 export async function recordWordTap(word: string) {
-  const { data, error } = await supabase.rpc("increment_word_tap" as any, { p_word: word });
+  const { data, error } = await supabase.rpc("update_word_model" as any, { p_word: word, p_label: 1 });
   if (error) console.error("recordWordTap", error);
   return data as any;
 }
 
 export async function recordWordExposures(words: string[]) {
   if (!words.length) return;
-  const { error } = await supabase.rpc("record_word_exposure" as any, { p_words: words });
+  const { error } = await supabase.rpc("update_word_model_batch" as any, { p_words: words, p_label: 0 });
   if (error) console.error("recordWordExposures", error);
 }
 
 export async function setWordMasteredApi(word: string, mastered: boolean) {
   const { error } = await supabase.rpc("set_word_mastered" as any, { p_word: word, p_mastered: mastered });
   if (error) console.error("setWordMasteredApi", error);
+}
+
+export async function predictWordsDifficulty(words: string[]): Promise<Record<string, { p: number; source: string }>> {
+  if (!words.length) return {};
+  const { data, error } = await supabase.rpc("predict_words_difficulty" as any, { p_words: words });
+  if (error) { console.error("predictWordsDifficulty", error); return {}; }
+  const out: Record<string, { p: number; source: string }> = {};
+  for (const r of (data ?? []) as any[]) out[r.word] = { p: Number(r.p) || 0, source: r.source };
+  return out;
+}
+
+export async function loadModelInfo(userId: string): Promise<{ trainedN: number } | null> {
+  const { data, error } = await supabase.from("word_model" as any).select("trained_n").eq("user_id", userId).maybeSingle();
+  if (error) { console.error("loadModelInfo", error); return null; }
+  if (!data) return { trainedN: 0 };
+  return { trainedN: (data as any).trained_n ?? 0 };
+}
+
+export async function resetWordModel() {
+  const { error } = await supabase.rpc("reset_word_model" as any);
+  if (error) console.error("resetWordModel", error);
 }

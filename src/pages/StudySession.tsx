@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 import { Volume2, ArrowRight, Eye, Focus, Sparkles } from "lucide-react";
 import { toast } from "sonner";
-import { recordWordTap, recordWordExposures } from "@/lib/api/learner";
+import { recordWordTap, recordWordExposures, predictWordsDifficulty } from "@/lib/api/learner";
 
 const AUTO_HELP_THRESHOLD = 0.4;
 const norm = (w: string) => w.toLowerCase().replace(/[^a-z']/g, "");
@@ -50,6 +50,7 @@ export default function StudySession() {
   const [activeWord, setActiveWord] = useState<number | null>(null);
   const [breakdown, setBreakdown] = useState<{ word: string; pieces: string[] } | null>(null);
   const [focus, setFocus] = useState(true);
+  const [predictions, setPredictions] = useState<Record<string, { p: number; source: string }>>({});
 
   useEffect(() => { log(`Session started · ${content.title} · supports ${JSON.stringify(supports)}`, "session"); }, []);
 
@@ -57,18 +58,36 @@ export default function StudySession() {
   const para = paragraphs[pIdx];
   const words = para.split(/\s+/);
 
-  // Record exposures for unique long words in this paragraph (fire-and-forget)
+  // Predict difficulty for all words in paragraph using the per-user ML model
   useEffect(() => {
-    const unique = Array.from(new Set(words.map(norm).filter((w) => w.length >= 4)));
-    if (unique.length) recordWordExposures(unique);
+    const unique = Array.from(new Set(words.map(norm).filter((w) => w.length >= 2)));
+    if (!unique.length) return;
+    let cancelled = false;
+    predictWordsDifficulty(unique).then((preds) => {
+      if (cancelled) return;
+      setPredictions(preds);
+      const sources = Object.values(preds).map((x) => x.source);
+      const fromModel = sources.filter((s) => s === "model").length;
+      if (fromModel > 0) log(`ML model scored ${fromModel}/${sources.length} words in this paragraph.`, "ml");
+    });
+    // exposures (label=0) recorded when user advances to next paragraph
+    return () => { cancelled = true; };
   }, [pIdx]);
 
   const isAutoHelp = (w: string) => {
-    const entry = difficultWords[norm(w)];
-    return !!entry && !entry.mastered && entry.difficulty >= threshold;
+    const n = norm(w);
+    const local = difficultWords[n];
+    if (local?.mastered) return false;
+    const p = predictions[n]?.p ?? local?.difficulty ?? 0;
+    return p >= threshold;
   };
 
   const next = () => {
+    const tapped = new Set(
+      Object.keys(difficultWords).filter((n) => (difficultWords[n]?.tapCount ?? 0) > 0)
+    );
+    const untapped = Array.from(new Set(words.map(norm).filter((w) => w.length >= 4 && !tapped.has(w))));
+    if (untapped.length) recordWordExposures(untapped); // batch SGD with label=0
     if (pIdx + 1 >= paragraphs.length) { nav("/study/feedback"); return; }
     setPIdx(pIdx + 1); setActiveWord(null); setBreakdown(null);
   };
