@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { useLearner } from "@/store/learner";
+import { useAuth } from "@/hooks/useAuth";
+import { upsertLearnerProfile } from "@/lib/api/learner";
 import { DECODING_TRIALS } from "@/lib/content";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles } from "lucide-react";
@@ -9,6 +11,7 @@ import { Sparkles } from "lucide-react";
 export default function DecodingAssessment() {
   const nav = useNavigate();
   const { recordDecoding, log, decoding } = useLearner();
+  const { user } = useAuth();
   const [i, setI] = useState(0);
   const [done, setDone] = useState(false);
 
@@ -17,9 +20,21 @@ export default function DecodingAssessment() {
   const answer = (difficult: boolean) => {
     recordDecoding(trial.kind, difficult);
     if (i + 1 >= DECODING_TRIALS.length) {
-      // log a friendly internal summary (not exposed)
       log("Decoding signal captured — calibrating supports.", "assessment");
       setDone(true);
+      // persist final scores (use updated values)
+      const next = { ...decoding, trials: decoding.trials + 1 };
+      if (difficult) {
+        if (trial.kind === "nonword") next.phonological += 1;
+        else next.surface += 1;
+      }
+      if (user) {
+        upsertLearnerProfile(user.id, {
+          phonological_score: next.phonological,
+          surface_score: next.surface,
+          decoding_trials: next.trials,
+        });
+      }
     } else {
       setI(i + 1);
     }
