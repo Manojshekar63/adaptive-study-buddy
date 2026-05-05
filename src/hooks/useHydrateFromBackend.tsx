@@ -9,6 +9,7 @@ export function useHydrateFromBackend() {
   const setOnboarding = useLearner((s) => s.setOnboarding);
   const setReading = useLearner((s) => s.setReading);
   const setSchedule = useLearner((s) => s.setSchedule);
+  const setScheduleId = useLearner((s) => s.setScheduleId);
 
   useEffect(() => {
     if (!user) return;
@@ -29,6 +30,7 @@ export function useHydrateFromBackend() {
       // load active schedule
       const sched = await loadActiveSchedule(user.id);
       if (sched && alive) {
+        setScheduleId(sched.schedule.id);
         setSchedule(
           sched.blocks.map((b: any) => ({
             id: b.id,
