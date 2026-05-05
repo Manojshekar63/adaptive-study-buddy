@@ -1,74 +1,123 @@
-## What "ML model" means here
+## Goal
 
-A real per-student difficulty model doesn't need a heavy neural net — those need huge data per user and would never personalize from a single learner's clicks. Instead, we'll use the **right** ML approach for one-user-at-a-time learning:
+Replace the Bayesian formula with a **trained logistic regression model per learner**, updated online (SGD) after every word interaction. The model predicts `p(struggle | word, learner)` from word features and learner state — not just from past taps on that specific word. This means it can predict difficulty for words the learner has **never seen before**, which the current model cannot.
 
-**Online Bayesian difficulty estimation per word, per learner.**
+## The model
 
-For every (user, word) pair we maintain a posterior probability `p(hard | user, word)` that updates after every interaction. This is the same family of models used by Duolingo (Half-Life Regression) and Anki (SM-2). It works from the very first click, learns continuously, and is fully explainable.
+**Per learner**, store a weight vector `w ∈ ℝ^9` and bias `b`:
 
-### The model (simple, real, runs in the DB)
-
-For each (user, word):
-- `taps` — times the learner asked for help on this word
-- `exposures` — times the word appeared in a passage they read
-- `last_seen` — timestamp of last exposure
-- `mastered` — learner-confirmed override
-
-Difficulty score:
-```text
-difficulty = (taps + α) / (exposures + α + β) * decay(last_seen)
 ```
-- `α = 1`, `β = 2` (Beta(1,2) prior — assume words are easy until proven otherwise)
-- `decay(t) = 0.5 ^ (days_since / half_life_days)`, half-life = 14 days (forgetting curve)
+features f(word, learner):
+  f1 = log(1 + length)
+  f2 = consonant_cluster_count        (e.g. "str", "ngth")
+  f3 = vowel_ratio                    (vowels / length)
+  f4 = syllable_estimate              (naive, same as current syllabify)
+  f5 = is_irregular_spelling          (1 if matches simple regex set)
+  f6 = log(1 + tap_count_for_word)    (per-user)
+  f7 = log(1 + exposures_for_word)    (per-user)
+  f8 = days_since_last_seen / 14      (capped)
+  f9 = learner.phonological_score / 5 (global learner trait)
 
-Decision rule used at render time:
-- `difficulty >= 0.4` AND not `mastered` → auto-show syllable breakdown + audio
-- `difficulty >= 0.7` → also surface the word in "Tricky words" dashboard
-- Threshold is tuned per-learner using their `phonological_score` (weaker decoders get a lower threshold so help arrives sooner)
+prediction:  p = sigmoid(w·f + b)
+loss:        binary cross-entropy with label y∈{0,1}
+                y = 1 if learner tapped the word for help in this exposure
+                y = 0 if word was shown and not tapped
+update (SGD, η=0.1, L2=1e-4):
+  w ← w − η · ((p − y)·f + λ·w)
+  b ← b − η · (p − y)
+```
 
-This is genuinely an ML model: it has a prior, a likelihood update, time decay, and a personalized decision threshold. It just happens to be the right size for the data we have.
+This is a real ML model: parameters, gradient updates, regularization, and predictions for unseen inputs. It learns **what kinds of words** trip up this specific learner — a feature the formula cannot capture.
 
-### Where the model runs
+## Where it runs
 
-- **Update step**: a Postgres function `record_word_event(word, kind)` runs on every tap and every exposure. Pure SQL, atomic, RLS-protected.
-- **Inference step**: a SQL view `v_word_difficulty` computes `difficulty` on read. The client just asks "give me my difficulty map" and renders accordingly.
+- **Training (online)**: Postgres function `update_word_model(p_word, p_label)` — pulls the learner's current weights, computes features in SQL, applies one SGD step, writes weights back. One round trip per interaction, ~1ms.
+- **Inference**: Postgres function `predict_word_difficulty(p_word)` returning `p`. Called rarely; mostly we batch-predict for all words in the current paragraph via `predict_words_difficulty(p_words text[])` returning `(word, p)`.
+- **Cold start**: until the learner has ≥10 events, fall back to the current `v_word_difficulty` Bayesian score. After 10 events, switch to the trained model. This is automatic in `predict_words_difficulty`.
 
-No external service, no API key, no edge function. The "model weights" are the per-row counts — they live with the user's data and respect RLS.
+All weights stay per-user, RLS-protected. No external compute, no edge function.
 
-## User-facing behavior
+## Schema changes
 
-1. Student reads a passage. Every word shown is logged as 1 exposure (batched).
-2. Student taps "process" → tap is logged → posterior updates → breakdown shows.
-3. Next time "process" appears in any passage, on any topic, the breakdown is **already visible** because `difficulty` crossed the threshold.
-4. Mastery: a "Got it" button on the dashboard sets `mastered=true`, which suppresses auto-help (but counts stay so the model can re-engage if struggle returns).
-5. Reasoning log explains every adaptive change in plain English: *"Auto-chunking enabled for 'process' — difficulty 0.55 after 3 taps in 7 days."*
+New table `word_model`:
+```text
+word_model
+  user_id      uuid pk
+  weights      double precision[]  -- length 9
+  bias         double precision    default 0
+  trained_n    integer             default 0   -- # SGD steps taken
+  updated_at   timestamptz
+```
+RLS: owner only. Auto-initialized on first call with zeros.
 
-## Files to add / change
+New table `word_event` (append-only, needed for proper labels):
+```text
+word_event
+  id           uuid pk
+  user_id      uuid
+  word         text       -- normalized
+  label        smallint   -- 1 = tap, 0 = exposure-without-tap
+  features     double precision[]  -- snapshot, length 9, for replay/audit
+  predicted_p  double precision
+  created_at   timestamptz
+```
+RLS: owner only. Used for: model audit, retraining from scratch, future batch experiments.
 
-**Database** (`supabase/migrations/<new>.sql`)
-- `word_events` table: `id, user_id, word, kind ('tap'|'exposure'), created_at`. RLS: owner only.
-- `word_mastery` table: `user_id, word, mastered`. RLS: owner only.
-- `record_word_event(p_word text, p_kind text)` SECURITY DEFINER function (granted to `authenticated` only) — inserts an event after lowercasing/stripping punctuation.
-- View `v_word_difficulty` returning `(user_id, word, taps, exposures, last_seen, difficulty, mastered)` with the formula above. RLS via underlying tables.
+Keep `word_difficulty` as the running counters table (already in place) — it feeds features `f6`, `f7`, `f8`.
 
-**Client store** (`src/store/learner.ts`)
-- Add `difficultWords: Record<word, { difficulty: number; mastered: boolean }>` and setter.
+## Functions
 
-**Hydration** (`src/hooks/useHydrateFromBackend.tsx`, `src/lib/api/learner.ts`)
-- On login, `select * from v_word_difficulty where user_id = auth.uid()` → load into store.
+- `extract_word_features(p_word text, p_user uuid) returns double precision[]` — computes the 9 features in SQL using `word_difficulty` for per-user counters and `learner_profiles` for `phonological_score`.
+- `predict_words_difficulty(p_words text[]) returns table(word text, p double precision, source text)` — batch predict; `source = 'model' | 'baseline'` depending on cold-start.
+- `update_word_model(p_word text, p_label smallint) returns void` — one SGD step + writes a `word_event` row + bumps `word_difficulty` counters (tap or exposure).
+- All `SECURITY DEFINER`, `SET search_path = public`, `GRANT EXECUTE ... TO authenticated` only.
 
-**Reading session** (`src/pages/StudySession.tsx`)
-- On paragraph render: batch-call `record_word_event` with `kind='exposure'` for unique words (debounced, fire-and-forget).
-- On word tap: `record_word_event(word, 'tap')`, optimistic local bump, show breakdown.
-- Word renderer: if `difficulty(word) >= threshold(user)` and not mastered, render with persistent underline + chunked syllables shown beneath it (no tap needed). Audio button inline if `supports.audio`.
+## Client changes
 
-**Dashboard** (`src/pages/Dashboard.tsx`)
-- "Your tricky words" card: top 8 by difficulty, with chunked spelling, difficulty bar, and "Got it" mastery button.
-- Empty state: "Tap any word that feels tricky — your reader will adapt."
+- `src/lib/api/learner.ts`:
+  - `predictWordsDifficulty(words: string[])` → calls `predict_words_difficulty`.
+  - `recordWordTap(word)` → now calls `update_word_model(word, 1)` instead of the old RPC.
+  - `recordWordExposures(words)` → loops and calls `update_word_model(word, 0)` for each (or a new batch RPC `update_word_model_batch`).
 
-**Reasoning log**
-- When a word first crosses the auto-help threshold, write a `reasoning_log` row.
+- `src/store/learner.ts`: keep `difficultWords` map but populate it from model predictions for the **current paragraph** (not from a global table). Cache predictions per word in-session.
 
-## Why not a deep ML model
+- `src/pages/StudySession.tsx`:
+  - On paragraph render: call `predictWordsDifficulty(uniqueWords)` once, store results in local state.
+  - Word renderer: auto-help when `p >= threshold`. Threshold formula stays personal (`max(0.25, 0.4 − 0.05 × phonological)`).
+  - On tap: optimistic local bump, fire `update_word_model(word, 1)`.
+  - After paragraph "Next": fire `update_word_model_batch(unTapped, 0)` so the model learns from non-taps too — these are the negative examples that prevent the model from predicting "everything is hard".
 
-A neural model needs thousands of labeled examples per user before it beats this. The Beta-Binomial + decay approach above is what production literacy apps (Duolingo, IXL, Lexia) actually ship, because it's the right tool for sparse, per-user, online data. If you later want a richer model (e.g. transfer learning across phonetic patterns so taps on "process" boost help on "progress"), it slots in cleanly on top of these same events.
+- `src/pages/Dashboard.tsx`: "Your tricky words" now ranks by the latest model prediction across recently-seen words. Add a small "Model trained on N interactions" line so the learning is visible. Add a "Reset my model" button that zeros the weights.
+
+## Reasoning log
+
+After every meaningful change, write a `reasoning_log` entry:
+- *"Model updated · word 'process' · prediction 0.72 · label 1"* (debug-style, behind the AI reasoning panel).
+- *"Auto-chunking now ON for words with consonant clusters ≥ 2 — your model learned this pattern."* — emitted when a feature weight crosses a threshold (interpretability touch).
+
+## Cold start + safety
+
+- Until `trained_n >= 10`, predictions come from the existing Bayesian view. No regression in UX for new learners.
+- Hard cap weights to `[-5, 5]` after each step (prevents runaway).
+- Bias initialized so `sigmoid(b) ≈ base_rate` (current global tap rate, default 0.15).
+
+## Files
+
+**Migrations**
+- `supabase/migrations/<new>.sql` — `word_model`, `word_event`, all functions, RLS, grants.
+
+**Code**
+- `src/lib/api/learner.ts` — new `predictWordsDifficulty`, replace existing tap/exposure RPC calls.
+- `src/store/learner.ts` — predictions cache helper.
+- `src/pages/StudySession.tsx` — predict-on-render, label-on-next, tap update.
+- `src/pages/Dashboard.tsx` — "Model trained on N" indicator, "Reset model" button.
+- `src/hooks/useHydrateFromBackend.tsx` — also load `trained_n` from `word_model` for the dashboard.
+
+## Why this is better than the current model
+
+- **Generalizes**: predicts for words the learner has never seen, using word shape + their phonological profile.
+- **Trainable**: real gradient descent, real loss, real regularization.
+- **Auditable**: every event stored with features and prediction → you can re-derive the model.
+- **Same UX**: auto-help still appears the same way; the brain behind it just got smarter.
+
+If you want even more ML, the natural next steps from here are: (1) factorization-machine over phoneme n-grams (transfer between similar words), (2) replace logistic regression with a small per-user MLP once `trained_n > 500`. Both slot in by swapping the predict/update functions; the data layout doesn't change.
