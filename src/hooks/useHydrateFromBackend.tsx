@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useLearner } from "@/store/learner";
-import { loadLearnerProfile, loadActiveSchedule } from "@/lib/api/learner";
+import { loadLearnerProfile, loadActiveSchedule, loadDifficultWords } from "@/lib/api/learner";
 
 /** Hydrate Zustand store from Supabase once user is logged in. */
 export function useHydrateFromBackend() {
