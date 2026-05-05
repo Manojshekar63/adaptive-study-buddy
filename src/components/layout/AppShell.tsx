@@ -6,10 +6,12 @@ import { Button } from "@/components/ui/button";
 import { ReasoningPanel } from "./ReasoningPanel";
 import { DemoTour } from "./DemoTour";
 import { ReactNode } from "react";
+import { useHydrateFromBackend } from "@/hooks/useHydrateFromBackend";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { reasoningOpen, toggleReasoning, setTour, tourActive } = useLearner();
   const { user, signOut } = useAuth();
+  useHydrateFromBackend();
   const loc = useLocation();
   const onLanding = loc.pathname === "/";
 
