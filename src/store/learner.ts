@@ -91,6 +91,7 @@ const initial = {
   reasoning: [] as ReasoningEntry[],
   reasoningOpen: false,
   tourActive: false,
+  difficultWords: {} as Record<string, { difficulty: number; tapCount: number; mastered: boolean }>,
 };
 
 export const useLearner = create<LearnerState>()(
