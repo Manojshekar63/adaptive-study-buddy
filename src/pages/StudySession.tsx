@@ -83,6 +83,11 @@ export default function StudySession() {
   };
 
   const next = () => {
+    const tapped = new Set(
+      Object.keys(difficultWords).filter((n) => (difficultWords[n]?.tapCount ?? 0) > 0)
+    );
+    const untapped = Array.from(new Set(words.map(norm).filter((w) => w.length >= 4 && !tapped.has(w))));
+    if (untapped.length) recordWordExposures(untapped); // batch SGD with label=0
     if (pIdx + 1 >= paragraphs.length) { nav("/study/feedback"); return; }
     setPIdx(pIdx + 1); setActiveWord(null); setBreakdown(null);
   };
