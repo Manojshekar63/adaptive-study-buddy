@@ -7,7 +7,7 @@ import { ChevronRight, X } from "lucide-react";
 
 const STEPS: { path: string; title: string; body: string }[] = [
   { path: "/", title: "Welcome", body: "ReadRight tunes every study session to how you actually read — no labels, just behaviour." },
-  { path: "/onboarding", title: "Quick onboarding", body: "Tell us your goal, subjects, and energy. We'll do the rest." },
+  { path: "/onboarding", title: "Quick onboarding", body: "Tell us your available time and energy. We'll do the rest." },
   { path: "/assess/reading", title: "Reading pace", body: "We measure how fast you decode real text — privately." },
   { path: "/assess/decoding", title: "Decoding signal", body: "Six word trials silently reveal whether you struggle more with sounding out or with irregular spellings." },
   { path: "/study/new", title: "Bring your content", body: "Drop a PDF or just type a topic — both paths feel equally fluent." },
