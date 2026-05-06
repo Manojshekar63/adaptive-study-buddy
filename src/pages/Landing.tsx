@@ -33,7 +33,7 @@ export default function Landing() {
           transition={{ delay: 0.25, duration: 0.6 }}
           className="mt-6 text-lg sm:text-xl text-muted-foreground reading-width mx-auto"
         >
-          ReadRight quietly observes how you read and reshapes every session around your pace, energy and decoding style — no labels, no lectures.
+          DyslexAI quietly observes how you read and reshapes every session around your pace, energy and decoding style — no labels, no lectures.
         </motion.p>
 
         <motion.div

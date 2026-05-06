@@ -62,7 +62,7 @@ export default function AuthPage() {
             <Brain className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="font-display font-bold text-xl leading-tight">Welcome to ReadRight</h1>
+            <h1 className="font-display font-bold text-xl leading-tight">Welcome to DyslexAI</h1>
             <p className="text-sm text-muted-foreground">Your adaptive study companion</p>
           </div>
         </div>
