@@ -9,8 +9,6 @@ import { upsertLearnerProfile, logReasoning } from "@/lib/api/learner";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRight, Battery, BatteryLow, BatteryMedium, BatteryFull } from "lucide-react";
 
-const SUBJECTS = ["Biology", "Math", "History", "English", "Chemistry", "Physics", "Geography", "Languages"];
-const GOALS = ["Pass an exam", "Stay on top of class", "Learn for fun", "Build a daily habit"];
 const FATIGUE: { v: Fatigue; label: string; icon: any }[] = [
   { v: 1, label: "Energised", icon: BatteryFull },
   { v: 2, label: "Fine", icon: BatteryMedium },
@@ -24,27 +22,25 @@ export default function Onboarding() {
   const { user } = useAuth();
   const [step, setStep] = useState(0);
   const [name, setName] = useState("");
-  const [goal, setGoal] = useState("");
-  const [subjects, setSubjects] = useState<string[]>([]);
   const [time, setTime] = useState(60);
   const [fatigue, setFatigue] = useState<Fatigue>(2);
 
-  const steps = ["Your name", "Your goal", "Subjects", "Time today", "Energy level"];
+  const steps = ["Your name", "Time today", "Energy level"];
   const next = () => setStep((s) => s + 1);
 
   const finish = async () => {
-    setOnboarding({ name, goal, subjects, availableMin: time, fatigue });
+    setOnboarding({ name, availableMin: time, fatigue });
     log(`Profile saved · ${time} min available · fatigue ${fatigue}/4`, "onboarding");
     if (user) {
       await upsertLearnerProfile(user.id, {
-        name, goal, subjects, available_min: time, fatigue,
+        name, available_min: time, fatigue,
       });
       await logReasoning(user.id, `Profile saved · ${time} min available · fatigue ${fatigue}/4`, "onboarding");
     }
     nav("/assess/reading");
   };
 
-  const canNext = [name.trim(), goal, subjects.length > 0, time > 0, true][step];
+  const canNext = [name.trim(), time > 0, true][step];
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -81,45 +77,6 @@ export default function Onboarding() {
             )}
             {step === 1 && (
               <>
-                <h2 className="font-display font-bold text-3xl mb-6">What's pulling you here, {name || "friend"}?</h2>
-                <div className="grid sm:grid-cols-2 gap-3">
-                  {GOALS.map((g) => (
-                    <button
-                      key={g}
-                      onClick={() => setGoal(g)}
-                      className={`p-4 rounded-xl border text-left transition-all hover-lift ${
-                        goal === g ? "border-primary bg-primary-soft ring-glow" : "border-border bg-card"
-                      }`}
-                    >
-                      <span className="font-medium">{g}</span>
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-            {step === 2 && (
-              <>
-                <h2 className="font-display font-bold text-3xl mb-6">Pick the subjects on your plate.</h2>
-                <div className="flex flex-wrap gap-2">
-                  {SUBJECTS.map((s) => {
-                    const on = subjects.includes(s);
-                    return (
-                      <button
-                        key={s}
-                        onClick={() => setSubjects((p) => (on ? p.filter((x) => x !== s) : [...p, s]))}
-                        className={`px-4 py-2 rounded-full border text-sm transition-all ${
-                          on ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border hover:border-primary/50"
-                        }`}
-                      >
-                        {s}
-                      </button>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-            {step === 3 && (
-              <>
                 <h2 className="font-display font-bold text-3xl mb-2">How much time do you have today?</h2>
                 <p className="text-muted-foreground mb-8">We'll fit a calm plan inside it.</p>
                 <div className="text-center mb-6">
@@ -138,7 +95,7 @@ export default function Onboarding() {
                 </div>
               </>
             )}
-            {step === 4 && (
+            {step === 2 && (
               <>
                 <h2 className="font-display font-bold text-3xl mb-6">How's your energy right now?</h2>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
