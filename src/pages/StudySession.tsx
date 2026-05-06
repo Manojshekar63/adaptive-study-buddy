@@ -187,7 +187,19 @@ export default function StudySession() {
                 {supports.audio && (
                   <Button
                     variant="outline"
-                    onClick={() => toast.success(`Playing audio: ${breakdown.word}`)}
+                    onClick={() => {
+                      const synth = window.speechSynthesis;
+                      if (!synth) {
+                        toast.error("Audio not supported in this browser");
+                        return;
+                      }
+                      synth.cancel();
+                      const u = new SpeechSynthesisUtterance(breakdown.word);
+                      u.rate = 0.75;
+                      u.pitch = 1;
+                      u.lang = "en-US";
+                      synth.speak(u);
+                    }}
                     className="gap-2 rounded-full"
                   >
                     <Volume2 className="w-4 h-4" /> Play audio
