@@ -1,76 +1,54 @@
-# Voice-Based Decoding Assessment
+# Use the uploaded PDF as the actual reading content
 
-Replace the manual "Easy / Difficult" buttons on `/assess/decoding` with a microphone flow. The learner taps a mic, reads the displayed word aloud, and the app automatically classifies the attempt as **Easy** or **Difficult** based on what it hears — no self-rating needed. The rest of the screen (header, word card, progress dots, completion state) stays exactly as in the screenshot.
+## The bug today
 
-## How the voice analysis works
+When a PDF is uploaded on `/study/new`:
+1. `StudyInput.handleUpload` extracts text via `extractFileText` into `uploadedText`.
+2. `generate()` calls `setTopicContent(undefined)` and then fires the `generate-content` edge function (Lovable AI) to **rewrite** the notes into 4 short paragraphs.
+3. While the AI is still working — or if it errors / runs out of credits — `StudySession` hits this fallback in `src/pages/StudySession.tsx`:
+   ```ts
+   return PRESET_TOPICS[Object.keys(PRESET_TOPICS)[0]];   // Photosynthesis
+   ```
+   So the user sees the canned Photosynthesis passage instead of anything from their PDF.
 
-We use the browser-native **Web Speech API** (`webkitSpeechRecognition` / `SpeechRecognition`) — no external API key, no cost, runs locally in Chrome/Edge/Safari. For each word:
+The user wants the **actual PDF text** to appear (a "manual" passage built from the upload), no Photosynthesis fallback, and no dependency on the AI rewrite.
 
-1. User taps the **mic button** (replaces the two buttons).
-2. We start `SpeechRecognition` with `lang="en-US"`, `interimResults=true`, `maxAlternatives=5`, and a **3.5s listening window**.
-3. We measure two signals:
-   - **Pronunciation match score** — Levenshtein-based similarity between the target word and each alternative transcript (best of 5). Normalized to `[0,1]`.
-   - **Response latency** — ms from `onstart` to first non-empty interim result. Long latency = hesitation = harder.
-4. **Classification rule** (deterministic, fast):
-   - `similarity ≥ 0.8` AND `latency < 1500ms` → **Easy**
-   - `similarity < 0.5` OR `latency > 2800ms` OR no speech detected → **Difficult**
-   - Otherwise → **Difficult** (conservative, since hesitation matters for dyslexia screening)
-5. For **nonwords** (`blap`, `strom`, `frindle`), the recognizer often returns the closest real word — we compare phonetically using a simple **Soundex / Metaphone-lite** function so `"blap"` ≈ `"blap"`/`"blah"`/`"blab"` counts as a successful decode attempt; total mismatch (e.g. silence or `"I don't know"`) counts as Difficult.
-6. Result is fed into the existing `recordDecoding(trial.kind, difficult)` call — **the downstream ML pipeline (logistic regression, `update_word_model`, phonological/surface scores) stays unchanged**.
+## Plan
 
-## UI changes (matching the screenshot)
-
-Everything in the card stays the same except the action area:
-
-```text
-┌─────────────────────────────────────┐
-│           Word 5 of 6               │
-│                                     │
-│           frindle                   │
-│                                     │
-│      ┌───────────────┐              │
-│      │  🎤  Tap to   │   ← single   │
-│      │     read      │     mic btn  │
-│      └───────────────┘              │
-│                                     │
-│   "Listening…" / waveform pulse     │
-│                                     │
-│      • • • • • ○                    │
-└─────────────────────────────────────┘
+### 1. Build the passage directly from the extracted PDF text
+File: `src/lib/pdfText.ts` — add a small helper:
+```ts
+export function chunkIntoParagraphs(text: string, target = 4): { title: string; paragraphs: string[] }
 ```
+- Cleans whitespace, splits on existing blank lines first.
+- If fewer than `target` chunks, splits on sentence boundaries (`. ! ?`) and re-groups into ~`target` paragraphs of roughly equal sentence count (cap each paragraph at ~80 words so it stays dyslexia-friendly).
+- Title = first non-empty line (≤ 60 chars), trimmed; falls back to the filename.
 
-States of the mic button:
-- **Idle**: teal pill, mic icon + "Tap to read aloud"
-- **Listening**: pulsing ring animation, "Listening…", red dot
-- **Analyzing**: spinner, "Got it — analyzing…"
-- **Result flash** (300ms): green check "Sounds easy" or amber "Let's note that" — then auto-advance to next word
+### 2. Use that passage immediately on upload
+File: `src/pages/StudyInput.tsx` (inside `generate()` when `source === "upload"`):
+- If `sourceText` has ≥ 40 chars, call `chunkIntoParagraphs(sourceText)` and `setTopicContent(...)` **before** navigating.
+- Skip the `generate-content` AI invocation entirely for uploads — the user explicitly wants their own notes, not a rewrite. (Topic mode keeps using the AI / preset path unchanged.)
+- If extraction failed (`uploadedText` < 40 chars), still navigate but set a clear placeholder passage like *"We couldn't read text from this PDF. Try a text-based PDF or type the topic instead."* — no Photosynthesis.
 
-Below the mic, a tiny muted line: *"We'll listen to how you read it — your mic stays on this device."*
+### 3. Remove the Photosynthesis fallback in StudySession
+File: `src/pages/StudySession.tsx`, the `content` `useMemo`:
+- If `topicContent?.paragraphs?.length` → use it.
+- Else if `topic && PRESET_TOPICS[topic]` → use the preset (only when the user explicitly picked that preset topic).
+- Else → return `{ title: topic || uploadedName || "Your reading", paragraphs: ["Your reading isn't ready yet. Go back to the schedule and try again."] }`.
+- **Delete** the `PRESET_TOPICS[Object.keys(PRESET_TOPICS)[0]]` line so Photosynthesis never appears unsolicited.
 
-### Fallback
-If `SpeechRecognition` is unavailable (Firefox, denied permission, no mic), we **gracefully fall back to the original two-button UI** with a small notice: *"Voice not available — tap how it felt instead."*
+### 4. Persist the manual passage
+In `StudyInput.generate()` for uploads, after `saveSchedule`, write the manual `content` onto the schedule row:
+```ts
+await supabase.from("schedules").update({ content }).eq("id", scheduleId);
+```
+So a refresh / `useHydrateFromBackend` still loads the user's PDF text, not a fallback.
 
-## Files to change
-
-| File | Change |
-|---|---|
-| `src/pages/DecodingAssessment.tsx` | Replace Easy/Difficult buttons with mic flow; keep header, word card, progress dots, and completion state identical. Call existing `recordDecoding` + `upsertLearnerProfile` with the auto-classified result. |
-| `src/lib/speech.ts` *(new)* | Wrapper around `SpeechRecognition`: `listenForWord(target, kind, timeoutMs) → { heard, similarity, latencyMs, difficult }`. Includes Levenshtein, vowel-stripped phonetic compare for nonwords, and capability detection. |
-| `src/store/learner.ts` | Add optional `lastVoiceSample?: { word; heard; similarity; latencyMs }` to the reasoning log payload so the existing reasoning panel can show *"Heard 'frindel' (0.71 match, 1.9s) → counted as difficult"*. No schema change needed. |
-
-## Reasoning-panel entries (keeps the "personalized" feel)
-
-After each trial we call `log(...)` with messages like:
-- `"Heard 'photosynthesis' clearly in 0.9s — easy."`
-- `"Heard 'frindel' (0.71 similarity, 1.9s hesitation) — counted as difficult."`
-- `"No speech detected for 'yacht' — counted as difficult."`
-
-## Privacy
-
-Web Speech API in Chrome/Edge streams audio to Google for transcription; we'll add a one-line disclosure under the mic and a `"Use buttons instead"` link that switches to the legacy UI permanently for that session. No audio is stored by us.
+## Files changed
+- `src/lib/pdfText.ts` — add `chunkIntoParagraphs`.
+- `src/pages/StudyInput.tsx` — build passage from PDF text, persist to `schedules.content`, skip AI for uploads.
+- `src/pages/StudySession.tsx` — remove Photosynthesis fallback, show graceful empty state.
 
 ## Out of scope
-
-- No new Supabase tables, no edge functions, no API keys.
-- No changes to the ML model, `word_model`, or the rest of the app — only the decoding-assessment input method changes.
-
+- The ML model, decoding assessment, voice flow, edge function code — all unchanged.
+- Topic-mode (typed topic / preset chips) keeps its current AI-generated passage behaviour.

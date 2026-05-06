@@ -26,3 +26,39 @@ export async function extractFileText(file: File): Promise<string> {
   }
   return "";
 }
+
+export function chunkIntoParagraphs(
+  text: string,
+  fallbackTitle = "Your notes",
+  target = 4
+): { title: string; paragraphs: string[] } {
+  const clean = (text || "").replace(/\s+/g, " ").trim();
+  if (!clean) return { title: fallbackTitle, paragraphs: [] };
+
+  // Title: first sentence or first ~60 chars
+  const firstStop = clean.search(/[.!?]\s/);
+  let title = firstStop > 0 && firstStop < 80 ? clean.slice(0, firstStop).trim() : clean.slice(0, 60).trim();
+  if (!title) title = fallbackTitle;
+
+  // Split into sentences
+  const sentences = clean.match(/[^.!?]+[.!?]+(\s|$)/g)?.map((s) => s.trim()).filter(Boolean) ?? [clean];
+
+  const paragraphs: string[] = [];
+  let cur = "";
+  const maxWordsPerPara = Math.max(40, Math.ceil(clean.split(/\s+/).length / target));
+
+  for (const s of sentences) {
+    const tentative = cur ? cur + " " + s : s;
+    if (tentative.split(/\s+/).length > maxWordsPerPara && cur) {
+      paragraphs.push(cur);
+      cur = s;
+    } else {
+      cur = tentative;
+    }
+  }
+  if (cur) paragraphs.push(cur);
+
+  // Cap to ~6 paragraphs to keep session focused
+  const capped = paragraphs.slice(0, 6);
+  return { title: title.replace(/[.!?]+$/, ""), paragraphs: capped.length ? capped : [clean] };
+}
