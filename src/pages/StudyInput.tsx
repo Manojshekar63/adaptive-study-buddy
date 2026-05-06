@@ -38,9 +38,23 @@ export default function StudyInput() {
     reasons.forEach((r) => log(r, "schedule"));
     log(`Built ${blocks.length}-block plan for "${chosenTopic}"`, "schedule");
 
-    // Use preset only for topic mode when there's an exact match. Uploads always personalize.
+    // Use preset only for topic mode when there's an exact match.
     const preset = source === "topic" ? PRESET_TOPICS[chosenTopic] : undefined;
-    if (preset) {
+
+    // For uploads: build the passage directly from the PDF text — no AI rewrite, no preset.
+    let manualContent: { title: string; paragraphs: string[] } | undefined;
+    if (source === "upload" && sourceText && sourceText.trim().length >= 40) {
+      manualContent = chunkIntoParagraphs(sourceText, chosenTopic);
+      setTopicContent(manualContent);
+    } else if (source === "upload") {
+      manualContent = {
+        title: chosenTopic,
+        paragraphs: [
+          "We couldn't read text from this file. Try a text-based PDF or type the topic instead.",
+        ],
+      };
+      setTopicContent(manualContent);
+    } else if (preset) {
       setTopicContent(preset);
     } else {
       setTopicContent(undefined);
@@ -54,10 +68,14 @@ export default function StudyInput() {
         setScheduleId(result.scheduleId);
         setSchedule(result.blocks);
         for (const r of reasons) await logReasoning(user.id, r, "schedule", result.scheduleId);
+        // Persist the manual passage so refresh / hydrate keeps the user's PDF text.
+        if (manualContent) {
+          await supabase.from("schedules").update({ content: manualContent as any }).eq("id", result.scheduleId);
+        }
       }
     }
 
-    if (!preset) {
+    if (source === "topic" && !preset) {
       toast.message("Preparing your reading…");
       supabase.functions
         .invoke("generate-content", {
