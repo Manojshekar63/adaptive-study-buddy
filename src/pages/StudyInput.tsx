@@ -12,7 +12,7 @@ import { Upload, FileText, Sparkles, ArrowRight, X } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { extractFileText } from "@/lib/pdfText";
+import { extractFileText, chunkIntoParagraphs } from "@/lib/pdfText";
 
 export default function StudyInput() {
   const nav = useNavigate();

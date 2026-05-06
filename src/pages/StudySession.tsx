@@ -42,8 +42,10 @@ export default function StudySession() {
   const content = useMemo(() => {
     if (topicContent?.paragraphs?.length) return topicContent;
     if (topic && PRESET_TOPICS[topic]) return PRESET_TOPICS[topic];
-    if (topic) return { title: topic, paragraphs: ["Your reading is being prepared. Please head back to the schedule in a moment."] };
-    return PRESET_TOPICS[Object.keys(PRESET_TOPICS)[0]];
+    return {
+      title: topic || uploadedName || "Your reading",
+      paragraphs: ["Your reading isn't ready yet. Head back to the schedule and try again."],
+    };
   }, [topic, uploadedName, topicContent]);
 
   const [pIdx, setPIdx] = useState(0);
