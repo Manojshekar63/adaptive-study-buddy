@@ -23,7 +23,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="w-9 h-9 rounded-xl bg-primary text-primary-foreground grid place-items-center shadow-card">
               <Brain className="w-5 h-5" />
             </div>
-            <span className="font-display font-bold text-lg tracking-tight">ReadRight</span>
+            <span className="font-display font-bold text-lg tracking-tight">DyslexAI</span>
           </Link>
           <nav className="flex items-center gap-2">
             {!onLanding && (

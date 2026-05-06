@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY missing");
 
     const sys =
-      "You are ReadRight, a warm calm study coach for dyslexic learners. " +
+      "You are DyslexAI, a warm calm study coach for dyslexic learners. " +
       "Reply in ONE short sentence (max 18 words), no emoji, no jargon. " +
       "Explain how the plan was adapted based on how the last block felt.";
     const user = `Topic: ${topic ?? "the topic"}. Learner felt the last block was: ${difficulty}. Plan change summary: ${fallback ?? ""}.`;

@@ -22,7 +22,7 @@ export function ReasoningPanel() {
           <AnimatePresence initial={false}>
             {reasoning.length === 0 && (
               <p className="text-sm text-muted-foreground italic">
-                No signals yet. Start onboarding to see ReadRight think.
+                No signals yet. Start onboarding to see DyslexAI think.
               </p>
             )}
             {[...reasoning].reverse().map((r) => (
